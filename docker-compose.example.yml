@@ -1,0 +1,25 @@
+# Copier en docker-compose.yml et adapter.
+services:
+  vodio:
+    build: .
+    image: vodio:local
+    container_name: vodio
+    restart: unless-stopped
+    env_file: vodio.env
+    ports:
+      - "8000:8000"          # accès direct http://IP:8000 (manifest, page web)
+    volumes:
+      - vodio-data:/app/data # catalogue + watchlist persistés
+    # ── Exemple reverse-proxy Traefik (PathPrefix /vodio, stripprefix) ──
+    # networks: [votre_reseau]
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.vodio.rule=Host(`votre.domaine.tld`) && PathPrefix(`/vodio`)"
+    #   - "traefik.http.routers.vodio.entrypoints=websecure"
+    #   - "traefik.http.routers.vodio.tls.certresolver=votre-resolver"
+    #   - "traefik.http.routers.vodio.middlewares=vodio-strip"
+    #   - "traefik.http.middlewares.vodio-strip.stripprefix.prefixes=/vodio"
+    #   - "traefik.http.services.vodio.loadbalancer.server.port=8000"
+
+volumes:
+  vodio-data:

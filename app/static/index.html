@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VODIO — Ma liste</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1116">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="VODIO">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root {
+    --bg: #0e1116; --card: #1a1f27; --card2: #222834; --text: #e6e9ef;
+    --muted: #8b94a3; --accent: #f5a623; --ok: #3fb950; --wait: #d29922;
+    --border: #2b323d; --danger: #f85149;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f4f5f7; --card: #fff; --card2: #eef0f3; --text: #1a1f27;
+      --muted: #6b7280; --border: #e0e3e8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+  }
+  header {
+    padding: 1.2rem 1rem; text-align: center; border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0; font-size: 1.5rem; letter-spacing: .5px; }
+  header h1 span { color: var(--accent); }
+  header p { margin: .3rem 0 0; color: var(--muted); font-size: .85rem; }
+  main { max-width: 900px; margin: 0 auto; padding: 1rem; }
+  .row { display: flex; gap: .5rem; }
+  input[type=text], input[type=password] {
+    flex: 1; padding: .7rem .9rem; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card); color: var(--text); font-size: 1rem;
+  }
+  button {
+    padding: .7rem 1rem; border: 0; border-radius: 10px; background: var(--accent);
+    color: #1a1f27; font-weight: 600; font-size: .95rem; cursor: pointer;
+  }
+  button.ghost { background: var(--card2); color: var(--text); }
+  button.small { padding: .3rem .55rem; font-size: .8rem; }
+  button.danger { background: transparent; color: var(--danger); padding: .3rem .5rem; }
+  .list-item.done { opacity: .5; }
+  button:disabled { opacity: .5; cursor: default; }
+  h2 { font-size: 1rem; color: var(--muted); margin: 1.6rem 0 .6rem; text-transform: uppercase; letter-spacing: .5px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .8rem; }
+  .film {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .film img { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: var(--card2); }
+  .film .noposter { width:100%; aspect-ratio:2/3; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.8rem; background:var(--card2);}
+  .film .body { padding: .5rem .6rem; flex: 1; display: flex; flex-direction: column; gap: .4rem; }
+  .film .title { font-size: .85rem; font-weight: 600; }
+  .film .year { color: var(--muted); font-size: .78rem; }
+  .film button { width: 100%; padding: .45rem; font-size: .82rem; margin-top: auto; }
+  .list-item {
+    display: flex; align-items: center; gap: .8rem; padding: .6rem;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .5rem;
+  }
+  .list-item img { width: 46px; height: 69px; object-fit: cover; border-radius: 6px; background: var(--card2); }
+  .list-item .meta { flex: 1; }
+  .list-item .name { font-weight: 600; font-size: .95rem; }
+  .badge { font-size: .78rem; color: var(--muted); }
+  .empty { color: var(--muted); text-align: center; padding: 1.5rem; }
+  .toast {
+    position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%);
+    background: var(--card2); color: var(--text); padding: .6rem 1rem; border-radius: 10px;
+    border: 1px solid var(--border); opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+  #gate { max-width: 360px; margin: 3rem auto; text-align: center; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>VOD</span>IO — Ma liste</h1>
+  <p>Cherche un film et ajoute-le à ta liste Stremio</p>
+</header>
+
+<main>
+  <div id="gate">
+    <h2>Mot de passe</h2>
+    <div class="row">
+      <input type="password" id="pw" placeholder="Mot de passe VODIO" autocomplete="current-password">
+      <button onclick="unlock()">Entrer</button>
+    </div>
+    <p class="empty" id="gate-err"></p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="row">
+      <input type="text" id="q" placeholder="Titre du film…" autocomplete="off">
+      <button onclick="search()">Chercher</button>
+    </div>
+    <div id="results" class="grid"></div>
+
+    <h2>Ma liste (<span id="count">0</span>)</h2>
+    <div id="watchlist"></div>
+
+    <div id="watched-section" class="hidden">
+      <h2>Déjà vus (<span id="watched-count">0</span>)</h2>
+      <div id="watched"></div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = location.pathname.replace(/\/+$/, "");
+let PW = localStorage.getItem("vodio_pw") || "";
+
+function headers() { return { "X-Vodio-Password": PW, "Content-Type": "application/json" }; }
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function unlock() {
+  PW = document.getElementById("pw").value;
+  const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
+  if (r.status === 401) { document.getElementById("gate-err").textContent = "Mot de passe incorrect"; return; }
+  localStorage.setItem("vodio_pw", PW);
+  document.getElementById("gate").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  renderWatchlist((await r.json()).items);
+}
+
+async function search() {
+  const q = document.getElementById("q").value.trim();
+  if (!q) return;
+  const box = document.getElementById("results");
+  box.innerHTML = '<p class="empty">Recherche…</p>';
+  const r = await fetch(`${BASE}/api/search?q=` + encodeURIComponent(q), { headers: headers() });
+  if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de recherche</p>'; return; }
+  const { results } = await r.json();
+  if (!results.length) { box.innerHTML = '<p class="empty">Aucun résultat</p>'; return; }
+  box.innerHTML = "";
+  for (const f of results) {
+    const el = document.createElement("div");
+    el.className = "film";
+    const poster = f.poster
+      ? `<img src="${f.poster}" alt="" loading="lazy">`
+      : `<div class="noposter">Pas d'affiche</div>`;
+    const icon = f.media_type === "series" ? "📺" : "🎬";
+    el.innerHTML = `${poster}<div class="body">
+      <div class="title">${escapeHtml(f.name)}</div>
+      <div class="year">${icon} ${f.year || ""}</div>
+      <button onclick='add(${f.tmdb_id}, ${JSON.stringify(f.media_type)}, this)'>+ Ajouter</button></div>`;
+    box.appendChild(el);
+  }
+}
+
+async function add(tmdbId, mediaType, btn) {
+  btn.disabled = true; btn.textContent = "…";
+  const r = await fetch(`${BASE}/api/watchlist`, {
+    method: "POST", headers: headers(), body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType })
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    toast(e.detail || "Échec de l'ajout"); btn.disabled = false; btn.textContent = "+ Ajouter"; return;
+  }
+  const { added } = await r.json();
+  btn.textContent = added ? "✓ Ajouté" : "Déjà présent";
+  toast(added ? "Ajouté (dispo en cours de vérif…)" : "Déjà dans ta liste");
+  reloadWatchlist();
+  // Le badge de dispo est calculé en arrière-plan : on recharge après ~35 s.
+  if (added) setTimeout(reloadWatchlist, 35000);
+}
+
+async function reloadWatchlist() {
+  const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
+  if (r.ok) renderWatchlist((await r.json()).items);
+}
+
+function itemRow(m, watched) {
+  const el = document.createElement("div");
+  el.className = "list-item" + (watched ? " done" : "");
+  const poster = m.poster ? `<img src="${m.poster}" alt="">` : "";
+  const icon = m.type === "series" ? "📺" : "🎬";
+  const id = JSON.stringify(m.id);
+  const toggle = watched
+    ? `<button class="ghost small" onclick='setWatched(${id}, false, this)'>↩︎ Revoir</button>`
+    : `<button class="ghost small" onclick='setWatched(${id}, true, this)'>✓ Vu</button>`;
+  el.innerHTML = `${poster}<div class="meta">
+    <div class="name">${escapeHtml(m.name)}</div>
+    <div class="badge">${icon} ${m.releaseInfo || ""}</div></div>
+    ${toggle}
+    <button class="danger" onclick='remove(${id}, this)'>Retirer</button>`;
+  return el;
+}
+
+function renderWatchlist(items) {
+  const toWatch = items.filter(m => !m.watched);
+  const watched = items.filter(m => m.watched);
+  document.getElementById("count").textContent = toWatch.length;
+  const box = document.getElementById("watchlist");
+  box.innerHTML = "";
+  if (!toWatch.length) box.innerHTML = '<p class="empty">Ta liste est vide</p>';
+  else toWatch.forEach(m => box.appendChild(itemRow(m, false)));
+
+  const section = document.getElementById("watched-section");
+  const wbox = document.getElementById("watched");
+  document.getElementById("watched-count").textContent = watched.length;
+  if (watched.length) {
+    section.classList.remove("hidden");
+    wbox.innerHTML = "";
+    watched.forEach(m => wbox.appendChild(itemRow(m, true)));
+  } else {
+    section.classList.add("hidden");
+  }
+}
+
+async function setWatched(imdbId, watched, btn) {
+  btn.disabled = true;
+  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/watched", {
+    method: "POST", headers: headers(), body: JSON.stringify({ watched })
+  });
+  if (r.ok) { toast(watched ? "Marqué comme vu" : "Remis à voir"); reloadWatchlist(); }
+  else btn.disabled = false;
+}
+
+async function remove(imdbId, btn) {
+  btn.disabled = true;
+  const r = await fetch(`${BASE}/api/watchlist/` + imdbId, { method: "DELETE", headers: headers() });
+  if (r.ok) { toast("Retiré"); reloadWatchlist(); } else { btn.disabled = false; }
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+document.getElementById("q").addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
+if (PW) unlock();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});
+}
+</script>
+</body>
+</html>

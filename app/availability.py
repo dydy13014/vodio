@@ -2,9 +2,15 @@
 
 Pour chaque titre, interroge AIOStreams avec la config du compte dydy (prod) —
 il agrège TOUTES les sources (WAStream, StreamFusion, Frenchio, Wacustom…).
-Un titre est ✅ seulement si au moins une source atteint la résolution minimale
-`min_res` (défaut 720p) ; sinon ⏳ (aucune source, ou uniquement du CAM/TS/basse
-qualité sans résolution annoncée — cas des films pas encore vraiment sortis).
+Un titre est ✅ seulement si au moins une source **en cache instantané** (⚡)
+atteint la résolution minimale `min_res` (défaut 720p) ; sinon ⏳ (aucune
+source, ou uniquement du CAM/TS/basse qualité/non-caché sans résolution
+fiable). Les torrents non mis en cache (⏳) sont ignorés pour le calcul de la
+résolution : leur nom n'a jamais été vérifié par un téléchargement réel et
+peut mentir sur la qualité (ex. torrent annoncé "1080p BluRay" pour un film
+sorti au cinéma la semaine précédente — un vrai BluRay n'existe pas encore à
+ce stade). Les DDL sont quasi toujours en cache instantané (lien direct, pas
+de notion de cache) et ne sont donc pas pénalisés par cette règle.
 En cas d'erreur (timeout, config invalide) le nom reste sans badge — inconnu
 n'est pas indisponible. Fan-out AIOStreams ~10-30 s : concurrence limitée à 3,
 uniquement au refresh quotidien.
@@ -43,6 +49,15 @@ def _strip(name: str) -> str:
     return name[2:] if name[:2] in ("✅ ", "⏳ ") else name
 
 
+def _is_cached(stream_name: str) -> bool:
+    """Un flux ⚡ (cache instantané) a déjà été réellement téléchargé par
+    quelqu'un — sa qualité annoncée est donc fiable. Un flux ⏳ (torrent non
+    caché) n'a jamais été vérifié : son nom peut prétendre n'importe quoi.
+    Les DDL (liens directs) n'ont pas de notion de cache et sont marqués ⚡
+    par convention par AIOStreams — ils ne sont donc pas pénalisés ici."""
+    return "⚡" in stream_name
+
+
 async def _check_one(
     client: httpx.AsyncClient, base: str, config: str, meta: dict,
     sem: asyncio.Semaphore, min_res: int,
@@ -62,7 +77,10 @@ async def _check_one(
             return
         best = 0
         for s in streams:
-            text = f"{s.get('name', '')} {s.get('description') or s.get('title') or ''}"
+            name = s.get("name", "")
+            if not _is_cached(name):
+                continue
+            text = f"{name} {s.get('description') or s.get('title') or ''}"
             best = max(best, stream_resolution(text))
         available = best >= min_res
         meta["name"] = ("✅ " if available else "⏳ ") + _strip(meta["name"])

@@ -4,3 +4,6 @@ venv/
 __pycache__/
 *.pyc
 data/
+
+# Extension locale (jamais publiée)
+app/_private_cache_check.py

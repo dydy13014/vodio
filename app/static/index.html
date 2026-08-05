@@ -5,114 +5,348 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VODIO — Ma liste</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0e1116">
+<meta name="theme-color" content="#08090d">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="VODIO">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0e1116; --card: #1a1f27; --card2: #222834; --text: #e6e9ef;
-    --muted: #8b94a3; --accent: #f5a623; --ok: #3fb950; --wait: #d29922;
-    --border: #2b323d; --danger: #f85149;
+    --bg: #08090d;
+    --surface: #11131a;
+    --surface-2: #181b24;
+    --text: #f7f7fb;
+    --muted: #a9adba;
+    --accent: #e6394a;
+    --accent-2: #ff5468;
+    --accent-ink: #ffffff;
+    --border: rgba(255,255,255,.09);
+    --ok: #3ecf70;
+    --wait: #e8a53a;
+    --danger: #ff5a5a;
+    --shadow: 0 20px 60px rgba(0,0,0,.45);
+    --radius: 18px;
+    --container: min(1180px, calc(100% - 32px));
   }
   @media (prefers-color-scheme: light) {
     :root {
-      --bg: #f4f5f7; --card: #fff; --card2: #eef0f3; --text: #1a1f27;
-      --muted: #6b7280; --border: #e0e3e8;
+      --bg: #f2f0ec; --surface: #ffffff; --surface-2: #ece9e2; --text: #17140f;
+      --muted: #6f6b62; --border: rgba(20,15,5,.12); --accent: #c22436; --accent-2: #d94357; --accent-ink: #ffffff;
+      --ok: #1f8a4c; --wait: #9c6a17; --danger: #b6302f; --shadow: 0 16px 40px -18px rgba(30,25,15,.3);
     }
   }
+  :root[data-theme="dark"] {
+    --bg: #08090d; --surface: #11131a; --surface-2: #181b24; --text: #f7f7fb; --muted: #a9adba;
+    --border: rgba(255,255,255,.09); --accent: #e6394a; --accent-2: #ff5468; --accent-ink: #ffffff;
+    --ok: #3ecf70; --wait: #e8a53a; --danger: #ff5a5a; --shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f0ec; --surface: #ffffff; --surface-2: #ece9e2; --text: #17140f; --muted: #6f6b62;
+    --border: rgba(20,15,5,.12); --accent: #c22436; --accent-2: #d94357; --accent-ink: #ffffff;
+    --ok: #1f8a4c; --wait: #9c6a17; --danger: #b6302f; --shadow: 0 16px 40px -18px rgba(30,25,15,.3);
+  }
+
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark light; }
   body {
-    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--bg); color: var(--text); line-height: 1.5;
+    margin: 0; overflow-x: hidden;
+    background: radial-gradient(circle at 80% -10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 28%), var(--bg);
+    color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5; font-variant-numeric: tabular-nums;
   }
-  header {
-    padding: 1.2rem 1rem; text-align: center; border-bottom: 1px solid var(--border);
+  body.modal-open { overflow: hidden; }
+  img { display: block; max-width: 100%; }
+  button, input { font: inherit; color: inherit; }
+
+  .container { width: var(--container); margin-inline: auto; }
+  .section { padding: 56px 0; }
+  .section-title { margin: 0 0 6px; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -.03em; font-weight: 800; }
+  .section-title .count { color: var(--muted); font-size: .85rem; font-weight: 600; }
+  .section-subtitle { margin: 0 0 28px; color: var(--muted); max-width: 640px; font-size: .92rem; }
+
+  /* ---------- Header ---------- */
+  .site-header {
+    position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid transparent;
+    transition: background .3s ease, border-color .3s ease, backdrop-filter .3s ease;
   }
-  header h1 { margin: 0; font-size: 1.5rem; letter-spacing: .5px; }
-  header h1 span { color: var(--accent); }
-  header p { margin: .3rem 0 0; color: var(--muted); font-size: .85rem; }
-  main { max-width: 900px; margin: 0 auto; padding: 1rem; }
-  .row { display: flex; gap: .5rem; }
-  input[type=text], input[type=password] {
-    flex: 1; padding: .7rem .9rem; border: 1px solid var(--border); border-radius: 10px;
-    background: var(--card); color: var(--text); font-size: 1rem;
+  .site-header.scrolled { background: color-mix(in srgb, var(--bg) 84%, transparent); border-color: var(--border); backdrop-filter: blur(18px); }
+  .nav-wrap { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 1.2rem; font-weight: 900; letter-spacing: -.03em; }
+  .brand-mark {
+    width: 34px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #8e0007); box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent);
+    color: #fff; font-size: .95rem;
   }
-  button {
-    padding: .7rem 1rem; border: 0; border-radius: 10px; background: var(--accent);
-    color: #1a1f27; font-weight: 600; font-size: .95rem; cursor: pointer;
+  .nav-links { display: flex; align-items: center; gap: 6px; }
+  .tab {
+    background: transparent; border: 0; border-radius: 999px; padding: .5rem 1rem;
+    color: var(--muted); font-weight: 700; font-size: .88rem; cursor: pointer; transition: color .2s, background .2s;
   }
-  button.ghost { background: var(--card2); color: var(--text); }
-  button.small { padding: .3rem .55rem; font-size: .8rem; }
-  button.danger { background: transparent; color: var(--danger); padding: .3rem .5rem; }
-  .list-item.done { opacity: .5; }
-  button:disabled { opacity: .5; cursor: default; }
-  h2 { font-size: 1rem; color: var(--muted); margin: 1.6rem 0 .6rem; text-transform: uppercase; letter-spacing: .5px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .8rem; }
-  .film {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    overflow: hidden; display: flex; flex-direction: column;
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent-ink); background: var(--accent); }
+  .menu-toggle {
+    display: none; width: 42px; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 10px;
+    background: color-mix(in srgb, var(--text) 4%, transparent); cursor: pointer; font-size: 1.1rem;
   }
-  .film img { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: var(--card2); }
-  .film .noposter { width:100%; aspect-ratio:2/3; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:.8rem; background:var(--card2);}
-  .film .body { padding: .5rem .6rem; flex: 1; display: flex; flex-direction: column; gap: .4rem; }
-  .film .title { font-size: .85rem; font-weight: 600; }
-  .film .year { color: var(--muted); font-size: .78rem; }
-  .film button { width: 100%; padding: .45rem; font-size: .82rem; margin-top: auto; }
-  .list-item {
-    display: flex; align-items: center; gap: .8rem; padding: .6rem;
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .5rem;
+
+  /* ---------- Hero ---------- */
+  .hero {
+    min-height: 62vh; display: flex; align-items: flex-end; position: relative;
+    isolation: isolate; margin-bottom: 8px; overflow: hidden;
   }
-  .list-item img { width: 46px; height: 69px; object-fit: cover; border-radius: 6px; background: var(--card2); }
-  .list-item .meta { flex: 1; }
-  .list-item .name { font-weight: 600; font-size: .95rem; }
-  .badge { font-size: .78rem; color: var(--muted); }
-  .empty { color: var(--muted); text-align: center; padding: 1.5rem; }
+  .hero-bg {
+    position: absolute; inset: 0; z-index: -2; background-position: center 22%; background-size: cover;
+    opacity: 1; transition: opacity .5s ease, background-image .1s;
+  }
+  .hero::after {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background:
+      linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 78%, transparent) 42%, color-mix(in srgb, var(--bg) 18%, transparent) 78%),
+      linear-gradient(0deg, var(--bg) 0%, transparent 42%);
+  }
+  .hero-content { padding: 90px 0 44px; max-width: 640px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--border);
+    border-radius: 999px; background: color-mix(in srgb, #000 30%, transparent); font-size: .72rem;
+    font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-2);
+  }
+  .hero h1 { margin: 16px 0 10px; font-size: clamp(2.1rem, 5.5vw, 3.8rem); line-height: .98; letter-spacing: -.045em; text-wrap: balance; }
+  .hero p { margin: 0; color: var(--muted); font-size: .92rem; max-width: 520px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .hero-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 18px 0 22px; }
+  .pill {
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: color-mix(in srgb, var(--text) 6%, transparent); font-size: .78rem; font-weight: 700; color: var(--text);
+  }
+  .hero[hidden] { display: none; }
+
+  .row { display: flex; gap: .6rem; }
+  input[type=text], input[type=password], input[type=number] {
+    padding: .7rem .9rem; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--surface); color: var(--text); font-size: 1rem;
+  }
+  input[type=text]:focus, input[type=password]:focus, input[type=number]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row input[type=text] { flex: 1; }
+
+  button.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px;
+    padding: 0 18px; border: none; border-radius: 11px; background: var(--accent); color: var(--accent-ink);
+    font-weight: 800; cursor: pointer; box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 30%, transparent);
+    transition: transform .15s ease, background .15s ease;
+  }
+  button.btn:hover { transform: translateY(-2px); background: var(--accent-2); }
+  button.btn:active { transform: translateY(0); }
+  button.ghost {
+    padding: .6rem 1rem; border: 1px solid var(--border); border-radius: 10px;
+    background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); font-weight: 700; cursor: pointer;
+  }
+  button.ghost:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+  button.small { padding: .4rem .7rem; font-size: .8rem; border-radius: 8px; }
+  button.danger { background: transparent; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); color: var(--danger); border-radius: 8px; padding: .4rem .7rem; font-size: .8rem; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; transform: none !important; }
+  button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+  /* ---------- Grille d'affiches ---------- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 20px 18px; }
+
+  .movie-card { position: relative; }
+  .poster-wrap {
+    position: relative; overflow: hidden; border-radius: var(--radius); aspect-ratio: 2/3;
+    background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(0,0,0,.25);
+    cursor: pointer; transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+  }
+  .poster-wrap:hover { transform: translateY(-6px); border-color: color-mix(in srgb, #fff 18%, transparent); box-shadow: var(--shadow); z-index: 3; }
+  .poster-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s cubic-bezier(.2,.8,.2,1); }
+  .poster-wrap:hover img { transform: scale(1.07); }
+  .noposter { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .76rem; text-align: center; padding: .5rem; }
+
+  .card-overlay {
+    position: absolute; inset: 0; z-index: 2; display: flex; align-items: flex-end; padding: 12px;
+    background: linear-gradient(transparent 40%, rgba(4,5,8,.94)); opacity: 0; transition: opacity .25s ease; pointer-events: none;
+  }
+  .poster-wrap:hover .card-overlay { opacity: 1; }
+  .card-overlay span { color: #ecebf2; font-size: .74rem; font-weight: 600; }
+  .card-overlay .card-desc { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; color: #d5d7de; margin-top: .3rem; }
+
+  .chip {
+    position: absolute; top: .5rem; left: .5rem; z-index: 3; padding: .2rem .55rem; border-radius: 999px;
+    font-size: .7rem; font-weight: 800; backdrop-filter: blur(6px);
+    background: color-mix(in srgb, #000 55%, transparent); border: 1px solid var(--border);
+  }
+  .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+  .chip.wait { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 45%, transparent); }
+  .chip.watched { color: var(--muted); }
+  .date-chip { position: absolute; top: .5rem; left: .5rem; z-index: 3; padding: .2rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 800; backdrop-filter: blur(6px); background: color-mix(in srgb, #000 55%, transparent); border: 1px solid var(--border); color: var(--text); }
+
+  .add-fab {
+    position: absolute; right: .5rem; bottom: .5rem; z-index: 3; width: 2rem; height: 2rem; padding: 0;
+    border: none; border-radius: 999px; background: var(--accent); color: #fff; font-size: 1.05rem;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: pointer;
+  }
+  .poster-wrap.watched-dim img { filter: grayscale(.5) brightness(.6); }
+
+  .card-title { margin-top: .5rem; font-weight: 700; font-size: .88rem; line-height: 1.25; }
+  .card-meta { color: var(--muted); font-size: .76rem; }
+
+  .empty { color: var(--muted); text-align: center; padding: 2rem 1rem; font-size: .95rem; }
+  .hidden { display: none !important; }
+
   .toast {
-    position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%);
-    background: var(--card2); color: var(--text); padding: .6rem 1rem; border-radius: 10px;
-    border: 1px solid var(--border); opacity: 0; transition: opacity .3s; pointer-events: none;
+    position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%) translateY(6px);
+    background: var(--surface-2); color: var(--text); padding: .65rem 1.1rem; border-radius: 10px;
+    border: 1px solid var(--border); box-shadow: var(--shadow); opacity: 0; transition: opacity .25s, transform .25s;
+    pointer-events: none; font-size: .88rem; max-width: 90vw; z-index: 3000;
   }
-  .toast.show { opacity: 1; }
-  #gate { max-width: 360px; margin: 3rem auto; text-align: center; }
-  .hidden { display: none; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- Gate ---------- */
+  #gate { max-width: 340px; margin: 5rem auto 0; text-align: center; padding: 0 1rem; }
+  #gate .brand { justify-content: center; font-size: 1.6rem; margin-bottom: 1.2rem; }
+  #gate .row { margin-top: .8rem; }
+
+  /* ---------- Modal de détail ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 2000; display: none; place-items: center; padding: 20px;
+    background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+  }
+  .modal.open { display: grid; }
+  .modal-panel {
+    width: min(720px, 100%); max-height: min(88vh, 860px); overflow-y: auto;
+    border: 1px solid color-mix(in srgb, #fff 12%, transparent); border-radius: 22px; background: var(--surface);
+    box-shadow: 0 30px 100px rgba(0,0,0,.6); animation: modalIn .25s ease both;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(18px) scale(.98); } }
+  .modal-hero { position: relative; min-height: 240px; background-position: center; background-size: cover; }
+  .modal-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--surface), transparent 65%), linear-gradient(90deg, color-mix(in srgb, var(--surface) 75%, transparent), transparent 60%); }
+  .close-modal {
+    position: sticky; float: right; top: 12px; margin: 12px 12px 0 0; z-index: 10; width: 38px; aspect-ratio: 1;
+    border: 1px solid var(--border); border-radius: 50%; background: color-mix(in srgb, #000 55%, transparent); color: #fff;
+    cursor: pointer; font-size: 1rem;
+  }
+  .modal-content { padding: 0 26px 26px; margin-top: -54px; position: relative; z-index: 2; }
+  .modal-top { display: grid; grid-template-columns: 118px 1fr; gap: 18px; align-items: end; margin-bottom: 18px; }
+  .modal-poster { border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); aspect-ratio: 2/3; }
+  .modal-poster img { width: 100%; height: 100%; object-fit: cover; }
+  .modal-title h2 { margin: 0 0 8px; font-size: clamp(1.4rem, 4vw, 1.9rem); letter-spacing: -.03em; }
+  .modal-desc { color: var(--muted); font-size: .9rem; line-height: 1.55; margin: 1rem 0 0; }
+  .trailer-wrap { aspect-ratio: 16/9; overflow: hidden; border-radius: 14px; border: 1px solid var(--border); background: #000; margin-top: 1rem; }
+  .trailer-wrap iframe { width: 100%; height: 100%; border: 0; }
+  .trailer-label { font-size: .8rem; font-weight: 700; color: var(--muted); margin: 1rem 0 .4rem; text-transform: uppercase; letter-spacing: .06em; }
+  .modal-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+  .detail-card { padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; font-size: .85rem; margin-top: .8rem; }
+  .detail-card b { color: var(--text); }
+  .season-precache { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
+  .season-input { width: 3.6rem; }
+  .ep-manual { margin-top: .4rem; display: flex; flex-direction: column; gap: .4rem; }
+  .ep-row { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; font-size: .78rem; }
+  .magnet-input { flex: 1; min-width: 150px; font-size: .78rem; padding: .4rem .55rem; }
+
+  /* ---------- Animations au scroll ---------- */
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  @media (max-width: 760px) {
+    .menu-toggle { display: grid; place-items: center; }
+    .nav-links {
+      position: absolute; top: 60px; left: 12px; right: 12px; display: none; flex-direction: column;
+      gap: 2px; padding: 10px; border-radius: 14px; background: color-mix(in srgb, var(--bg) 96%, transparent);
+      border: 1px solid var(--border); backdrop-filter: blur(18px);
+    }
+    .nav-links.open { display: flex; }
+    .tab { text-align: left; }
+    .hero { min-height: 52vh; }
+    .hero-content { padding: 70px 0 32px; }
+    .modal-top { grid-template-columns: 92px 1fr; }
+  }
+  @media (max-width: 500px) {
+    :root { --container: min(100% - 22px, 1180px); }
+    .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .toast, .poster-wrap, .poster-wrap img, .card-overlay, button, .reveal { transition: none; }
+    .reveal { opacity: 1; transform: none; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1><span>VOD</span>IO — Ma liste</h1>
-  <p>Cherche un film et ajoute-le à ta liste Stremio</p>
-</header>
-
-<main>
-  <div id="gate">
-    <h2>Mot de passe</h2>
-    <div class="row">
-      <input type="password" id="pw" placeholder="Mot de passe VODIO" autocomplete="current-password">
-      <button onclick="unlock()">Entrer</button>
-    </div>
-    <p class="empty" id="gate-err"></p>
+<div id="gate">
+  <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span></div>
+  <div class="row">
+    <input type="password" id="pw" placeholder="Mot de passe VODIO" autocomplete="current-password" style="flex:1">
+    <button class="btn" onclick="unlock()">Entrer</button>
   </div>
+  <p class="empty" id="gate-err"></p>
+</div>
 
-  <div id="app" class="hidden">
-    <div class="row">
-      <input type="text" id="q" placeholder="Titre du film…" autocomplete="off">
-      <button onclick="search()">Chercher</button>
+<div id="app" class="hidden">
+  <header class="site-header" id="header">
+    <div class="container nav-wrap">
+      <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span></div>
+      <button class="menu-toggle" id="menuToggle" aria-label="Ouvrir le menu" aria-expanded="false">☰</button>
+      <nav class="nav-links" id="navLinks">
+        <button class="tab active" data-tab="mine" onclick="switchTab('mine')">Ma liste</button>
+        <button class="tab" data-tab="vod" onclick="switchTab('vod')">VOD</button>
+        <button class="tab" data-tab="cinema" onclick="switchTab('cinema')">Cinéma</button>
+      </nav>
     </div>
-    <div id="results" class="grid"></div>
+  </header>
 
-    <h2>Ma liste (<span id="count">0</span>)</h2>
-    <div id="watchlist"></div>
-
-    <div id="watched-section" class="hidden">
-      <h2>Déjà vus (<span id="watched-count">0</span>)</h2>
-      <div id="watched"></div>
+  <section class="hero hidden" id="hero">
+    <div class="hero-bg" id="hero-bg"></div>
+    <div class="container hero-content reveal">
+      <span class="eyebrow">🔥 Tendances TMDB</span>
+      <h1 id="hero-title"></h1>
+      <p id="hero-sub"></p>
+      <div class="hero-meta" id="hero-meta"></div>
+      <button class="btn" id="hero-add">+ Ajouter à ma liste</button>
     </div>
-  </div>
-</main>
+  </section>
+
+  <main class="container">
+    <div id="tab-mine">
+      <div class="row" style="margin-top:1.6rem">
+        <input type="text" id="q" placeholder="Titre du film…" autocomplete="off">
+        <button class="btn" onclick="search()">Chercher</button>
+      </div>
+      <div id="results" class="grid" style="margin-top:1rem"></div>
+
+      <div class="section">
+        <h2 class="section-title reveal">Ma liste <span class="count">(<span id="count">0</span>)</span></h2>
+        <div id="watchlist" class="grid"></div>
+      </div>
+
+      <div id="watched-section" class="hidden section" style="padding-top:0">
+        <h2 class="section-title reveal">Déjà vus <span class="count">(<span id="watched-count">0</span>)</span></h2>
+        <div id="watched" class="grid"></div>
+      </div>
+    </div>
+
+    <div id="tab-vod" class="hidden section">
+      <h2 class="section-title reveal">Nouveautés VOD</h2>
+      <div id="vod-new" class="grid"></div>
+      <h2 class="section-title reveal" style="margin-top:2rem">Sorties digitales récentes</h2>
+      <div id="vod-digital" class="grid"></div>
+    </div>
+
+    <div id="tab-cinema" class="hidden section">
+      <h2 class="section-title reveal">Sorties de la semaine</h2>
+      <div id="cinema-grid" class="grid"></div>
+    </div>
+  </main>
+</div>
 
 <div class="toast" id="toast"></div>
+
+<div class="modal" id="detailModal" role="dialog" aria-modal="true">
+  <div class="modal-panel">
+    <button class="close-modal" id="closeModal" aria-label="Fermer">✕</button>
+    <div class="modal-hero" id="modalHero"></div>
+    <div class="modal-content" id="modalContent"></div>
+  </div>
+</div>
 
 <script>
 const BASE = location.pathname.replace(/\/+$/, "");
@@ -125,6 +359,28 @@ function toast(msg) {
   setTimeout(() => t.classList.remove("show"), 2200);
 }
 
+// ---------- Reveal au scroll ----------
+let _observer;
+function observeReveals() {
+  if (_observer) _observer.disconnect();
+  _observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("visible"); _observer.unobserve(e.target); } });
+  }, { threshold: .1 });
+  document.querySelectorAll(".reveal:not(.visible)").forEach(el => _observer.observe(el));
+}
+document.addEventListener("DOMContentLoaded", observeReveals);
+
+// ---------- Header qui se floute au scroll + menu mobile ----------
+const _header = document.getElementById("header");
+window.addEventListener("scroll", () => { if (_header) _header.classList.toggle("scrolled", window.scrollY > 12); });
+const _menuToggle = document.getElementById("menuToggle");
+const _navLinks = document.getElementById("navLinks");
+_menuToggle.addEventListener("click", () => {
+  const open = _navLinks.classList.toggle("open");
+  _menuToggle.setAttribute("aria-expanded", open);
+  _menuToggle.textContent = open ? "✕" : "☰";
+});
+
 async function unlock() {
   PW = document.getElementById("pw").value;
   const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
@@ -133,6 +389,56 @@ async function unlock() {
   document.getElementById("gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   renderWatchlist((await r.json()).items);
+  loadHero();
+}
+
+// ---------- Bandeau héros : un titre au hasard parmi les nouveautés VOD disponibles ----------
+// ---------- Bandeau héros : carrousel des tendances TMDB, défilement auto ----------
+let _heroItems = [];
+let _heroIndex = 0;
+let _heroTimer = null;
+const HERO_INTERVAL_MS = 7000;
+
+function _renderHeroSlide(pick) {
+  const hero = document.getElementById("hero");
+  const heroBg = document.getElementById("hero-bg");
+  const eyebrowLabel = "🔥 Tendance TMDB";
+  heroBg.style.opacity = 0;
+  setTimeout(() => {
+    heroBg.style.backgroundImage = `url('${pick.backdrop || pick.poster}')`;
+    document.querySelector("#hero .eyebrow").textContent = eyebrowLabel;
+    document.getElementById("hero-title").textContent = pick.name;
+    document.getElementById("hero-sub").textContent = pick.overview || "";
+    document.getElementById("hero-meta").innerHTML = `<span class="pill">${eyebrowLabel}</span>` + (pick.year ? `<span class="pill">${escapeHtml(pick.year)}</span>` : "");
+    const addBtn = document.getElementById("hero-add");
+    addBtn.textContent = "+ Ajouter à ma liste";
+    addBtn.disabled = false;
+    addBtn.onclick = () => openCatalogDetail({ name: pick.name, poster: pick.poster, overview: pick.overview, releaseInfo: pick.year, tmdb_id: pick.tmdb_id }, "movie");
+    heroBg.style.opacity = 1;
+  }, 220);
+}
+
+function _advanceHero() {
+  if (!_heroItems.length) return;
+  _heroIndex = (_heroIndex + 1) % _heroItems.length;
+  _renderHeroSlide(_heroItems[_heroIndex]);
+}
+
+async function loadHero() {
+  const hero = document.getElementById("hero");
+  try {
+    const r = await fetch(`${BASE}/api/trending`, { headers: headers() });
+    if (!r.ok) return;
+    const trending = (await r.json()).items.map(i => ({ ...i, source: "trending" }));
+    if (!trending.length) return;
+    _heroItems = trending;
+    _heroIndex = 0;
+    _renderHeroSlide(_heroItems[0]);
+    hero.classList.remove("hidden");
+    observeReveals();
+    if (_heroTimer) clearInterval(_heroTimer);
+    _heroTimer = setInterval(_advanceHero, HERO_INTERVAL_MS);
+  } catch (e) { /* pas de héros si la source échoue, le reste de la page marche quand même */ }
 }
 
 async function search() {
@@ -147,15 +453,19 @@ async function search() {
   box.innerHTML = "";
   for (const f of results) {
     const el = document.createElement("div");
-    el.className = "film";
-    const poster = f.poster
-      ? `<img src="${f.poster}" alt="" loading="lazy">`
-      : `<div class="noposter">Pas d'affiche</div>`;
+    el.className = "movie-card";
+    const poster = f.poster ? `<img src="${f.poster}" alt="" loading="lazy">` : `<div class="noposter">Pas d'affiche</div>`;
     const icon = f.media_type === "series" ? "📺" : "🎬";
-    el.innerHTML = `${poster}<div class="body">
-      <div class="title">${escapeHtml(f.name)}</div>
-      <div class="year">${icon} ${f.year || ""}</div>
-      <button onclick='add(${f.tmdb_id}, ${JSON.stringify(f.media_type)}, this)'>+ Ajouter</button></div>`;
+    el.innerHTML = `
+      <div class="poster-wrap">${poster}
+        <div class="card-overlay"><span>${icon} ${f.year || ""}${f.overview ? `<div class="card-desc">${escapeHtml(f.overview)}</div>` : ""}</span></div>
+        <button class="add-fab" title="Ajouter à ma liste">+</button>
+      </div>
+      <div class="card-title">${escapeHtml(f.name)}</div>
+      <div class="card-meta">${icon} ${f.year || ""}</div>`;
+    const catalogItem = { name: f.name, poster: f.poster, releaseInfo: f.year, overview: f.overview };
+    el.querySelector(".poster-wrap").addEventListener("click", () => openCatalogDetail(catalogItem, f.media_type));
+    el.querySelector(".add-fab").addEventListener("click", function (e) { e.stopPropagation(); add(f.tmdb_id, f.media_type, this); });
     box.appendChild(el);
   }
 }
@@ -167,14 +477,93 @@ async function add(tmdbId, mediaType, btn) {
   });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
-    toast(e.detail || "Échec de l'ajout"); btn.disabled = false; btn.textContent = "+ Ajouter"; return;
+    toast(e.detail || "Échec de l'ajout"); btn.disabled = false; btn.textContent = "+"; return;
   }
   const { added } = await r.json();
-  btn.textContent = added ? "✓ Ajouté" : "Déjà présent";
+  btn.textContent = "✓";
   toast(added ? "Ajouté (dispo en cours de vérif…)" : "Déjà dans ta liste");
   reloadWatchlist();
-  // Le badge de dispo est calculé en arrière-plan : on recharge après ~35 s.
   if (added) setTimeout(reloadWatchlist, 35000);
+}
+
+// ---------- Onglets VOD / Cinéma (navigation + chargement paresseux) ----------
+const _tabLoaded = { vod: false, cinema: false };
+let _vodCache = null;
+let _watchlistCache = [];
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+  document.getElementById("tab-mine").classList.toggle("hidden", name !== "mine");
+  document.getElementById("tab-vod").classList.toggle("hidden", name !== "vod");
+  document.getElementById("tab-cinema").classList.toggle("hidden", name !== "cinema");
+  document.getElementById("hero").classList.toggle("hidden", name !== "mine" || !document.getElementById("hero-title").textContent);
+  _navLinks.classList.remove("open");
+  _menuToggle.setAttribute("aria-expanded", "false");
+  _menuToggle.textContent = "☰";
+  if (name === "vod" && !_tabLoaded.vod) { _tabLoaded.vod = true; loadVod(); }
+  if (name === "cinema" && !_tabLoaded.cinema) { _tabLoaded.cinema = true; loadCinema(); }
+}
+
+function _catalogCard(m, mediaType, extraChipHtml) {
+  const el = document.createElement("div");
+  el.className = "movie-card";
+  const poster = m.poster ? `<img src="${m.poster}" alt="" loading="lazy">` : `<div class="noposter">${escapeHtml(m.name)}</div>`;
+  el.innerHTML = `
+    <div class="poster-wrap">${poster}${extraChipHtml}
+      <div class="card-overlay"><span>🎬 ${escapeHtml(m.releaseInfo || "")}${m.description ? `<div class="card-desc">${escapeHtml(m.description)}</div>` : ""}</span></div>
+      <button class="add-fab" title="Ajouter à ma liste">+</button>
+    </div>
+    <div class="card-title">${escapeHtml(_stripBadgeJs(m.name))}</div>
+    <div class="card-meta">🎬 ${m.releaseInfo || ""}</div>`;
+  el.querySelector(".poster-wrap").addEventListener("click", () => openCatalogDetail(m, mediaType));
+  el.querySelector(".add-fab").addEventListener("click", function (e) { e.stopPropagation(); add(m.tmdb_id, mediaType, this); });
+  return el;
+}
+
+async function loadVod() {
+  const newBox = document.getElementById("vod-new");
+  const digitalBox = document.getElementById("vod-digital");
+  newBox.innerHTML = digitalBox.innerHTML = '<p class="empty">Chargement…</p>';
+  let items;
+  if (_vodCache) { items = _vodCache; }
+  else {
+    const r = await fetch(`${BASE}/api/vod`, { headers: headers() });
+    if (!r.ok) { newBox.innerHTML = '<p class="empty">Erreur de chargement</p>'; digitalBox.innerHTML = ""; return; }
+    items = (await r.json()).items;
+  }
+  newBox.innerHTML = "";
+  if (!items.length) newBox.innerHTML = '<p class="empty">Rien pour le moment</p>';
+  else items.forEach(m => {
+    const chip = (m.name || "").startsWith("✅") ? '<span class="chip ok">✅⚡</span>' : '<span class="chip wait">⏳</span>';
+    newBox.appendChild(_catalogCard(m, "movie", chip));
+  });
+
+  const dr = await fetch(`${BASE}/api/digital-releases`, { headers: headers() });
+  if (!dr.ok) { digitalBox.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
+  const { items: digitalItems } = await dr.json();
+  digitalBox.innerHTML = "";
+  if (!digitalItems.length) digitalBox.innerHTML = '<p class="empty">Rien pour le moment</p>';
+  else digitalItems.forEach(m => digitalBox.appendChild(_catalogCard({ ...m, releaseInfo: m.year }, "movie", "")));
+}
+
+function _formatCinemaDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
+async function loadCinema() {
+  const box = document.getElementById("cinema-grid");
+  box.innerHTML = '<p class="empty">Chargement…</p>';
+  const r = await fetch(`${BASE}/api/cinema`, { headers: headers() });
+  if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
+  const { items } = await r.json();
+  if (!items.length) { box.innerHTML = '<p class="empty">Rien cette semaine</p>'; return; }
+  box.innerHTML = "";
+  items.forEach(m => {
+    const dateLabel = _formatCinemaDate(m.cinema_release_date);
+    box.appendChild(_catalogCard(m, "movie", dateLabel ? `<span class="date-chip">${dateLabel}</span>` : ""));
+  });
 }
 
 async function reloadWatchlist() {
@@ -182,31 +571,35 @@ async function reloadWatchlist() {
   if (r.ok) renderWatchlist((await r.json()).items);
 }
 
-function itemRow(m, watched) {
+// Retire le préfixe de badge (✅/⚡/⏳) pour l'affichage du titre — le badge
+// vit dans la puce (chip) au-dessus de l'affiche, pas dans le nom.
+function _stripBadgeJs(name) { return (name || "").replace(/^[✅⏳⚡]+\s*/, ""); }
+
+function itemCard(m, watched) {
   const el = document.createElement("div");
-  el.className = "list-item" + (watched ? " done" : "");
-  const poster = m.poster ? `<img src="${m.poster}" alt="">` : "";
+  el.className = "movie-card";
+  const poster = m.poster ? `<img src="${m.poster}" alt="" loading="lazy">` : `<div class="noposter">${escapeHtml(m.name)}</div>`;
   const icon = m.type === "series" ? "📺" : "🎬";
-  const id = JSON.stringify(m.id);
-  const toggle = watched
-    ? `<button class="ghost small" onclick='setWatched(${id}, false, this)'>↩︎ Revoir</button>`
-    : `<button class="ghost small" onclick='setWatched(${id}, true, this)'>✓ Vu</button>`;
-  el.innerHTML = `${poster}<div class="meta">
-    <div class="name">${escapeHtml(m.name)}</div>
-    <div class="badge">${icon} ${m.releaseInfo || ""}</div></div>
-    ${toggle}
-    <button class="danger" onclick='remove(${id}, this)'>Retirer</button>`;
+  const isAvailable = (m.name || "").startsWith("✅");
+  const chip = watched ? `<span class="chip watched">👁 Vu</span>` : isAvailable ? `<span class="chip ok">✅⚡</span>` : `<span class="chip wait">⏳</span>`;
+  el.innerHTML = `
+    <div class="poster-wrap${watched ? " watched-dim" : ""}" onclick='openDetail(${JSON.stringify(m.id)})'>${poster}${chip}
+      <div class="card-overlay"><span>${icon} ${escapeHtml(m.releaseInfo || "")}</span></div>
+    </div>
+    <div class="card-title">${escapeHtml(_stripBadgeJs(m.name))}</div>
+    <div class="card-meta">${icon} ${m.releaseInfo || ""}</div>`;
   return el;
 }
 
 function renderWatchlist(items) {
+  _watchlistCache = items;
   const toWatch = items.filter(m => !m.watched);
   const watched = items.filter(m => m.watched);
   document.getElementById("count").textContent = toWatch.length;
   const box = document.getElementById("watchlist");
   box.innerHTML = "";
   if (!toWatch.length) box.innerHTML = '<p class="empty">Ta liste est vide</p>';
-  else toWatch.forEach(m => box.appendChild(itemRow(m, false)));
+  else toWatch.forEach(m => box.appendChild(itemCard(m, false)));
 
   const section = document.getElementById("watched-section");
   const wbox = document.getElementById("watched");
@@ -214,10 +607,305 @@ function renderWatchlist(items) {
   if (watched.length) {
     section.classList.remove("hidden");
     wbox.innerHTML = "";
-    watched.forEach(m => wbox.appendChild(itemRow(m, true)));
+    watched.forEach(m => wbox.appendChild(itemCard(m, true)));
   } else {
     section.classList.add("hidden");
   }
+  observeReveals();
+  // Si la modale est ouverte sur un item qu'on vient de reload, la resynchroniser.
+  if (_openDetailId != null) {
+    const fresh = items.find(m => m.id === _openDetailId);
+    if (fresh) renderModalBody(fresh); else closeDetail();
+  }
+}
+
+// ---------- Modale de détail : toutes les actions réelles d'un item ----------
+let _openDetailId = null;
+const modal = document.getElementById("detailModal");
+const modalHero = document.getElementById("modalHero");
+const modalContent = document.getElementById("modalContent");
+
+function openDetail(id) {
+  const m = _watchlistCache.find(item => item.id === id);
+  if (!m) return;
+  _openDetailId = id;
+  renderModalBody(m);
+  modal.classList.add("open");
+  document.body.classList.add("modal-open");
+}
+
+// Même modale, pour un titre pas (encore) dans la watchlist (VOD/Cinéma/
+// recherche) : pas d'actions de suivi (précache/téléchargement/vu), juste
+// l'info + le bouton d'ajout — ces actions n'ont de sens qu'une fois le
+// titre réellement suivi.
+// Bande-annonce chargée à la demande (pas stockée, cf. commentaire tmdb.py
+// get_trailer) — un seul <div id="trailer-slot"> commun aux deux variantes
+// de modale, rempli une fois la réponse arrivée pour ne pas bloquer
+// l'ouverture de la fiche sur cet appel.
+let _trailerToken = 0;
+async function _loadTrailer(tmdbId, mediaType) {
+  const token = ++_trailerToken;
+  if (!tmdbId) return;
+  try {
+    const r = await fetch(`${BASE}/api/trailer/${tmdbId}?media_type=${mediaType}`, { headers: headers() });
+    if (!r.ok) return;
+    const { key } = await r.json();
+    if (!key || token !== _trailerToken) return; // la modale a changé entre-temps
+    const slot = document.getElementById("trailer-slot");
+    if (!slot) return;
+    slot.innerHTML = `<div class="trailer-label">Bande-annonce</div>
+      <div class="trailer-wrap"><iframe src="https://www.youtube.com/embed/${key}" title="Bande-annonce" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+  } catch (e) { /* pas de bande-annonce trouvée : la fiche reste utilisable sans */ }
+}
+
+function openCatalogDetail(m, mediaType) {
+  _openDetailId = null;
+  modalHero.style.backgroundImage = m.poster ? `url('${m.poster}')` : "none";
+  const icon = mediaType === "series" ? "📺" : "🎬";
+  modalContent.innerHTML = `
+    <div class="modal-top">
+      <div class="modal-poster">${m.poster ? `<img src="${m.poster}" alt="">` : `<div class="noposter">${escapeHtml(m.name)}</div>`}</div>
+      <div class="modal-title">
+        <h2>${escapeHtml(_stripBadgeJs(m.name))}</h2>
+        <div class="hero-meta">
+          <span class="pill">${icon} ${mediaType === "series" ? "Série" : "Film"}</span>
+          ${m.releaseInfo ? `<span class="pill">${escapeHtml(m.releaseInfo)}</span>` : ""}
+        </div>
+      </div>
+    </div>
+    ${(m.description || m.overview) ? `<p class="modal-desc">${escapeHtml(m.description || m.overview)}</p>` : ""}
+    <div class="modal-actions"><button class="btn" id="catalog-add-btn">+ Ajouter à ma liste</button></div>
+    <div id="trailer-slot"></div>
+  `;
+  document.getElementById("catalog-add-btn").onclick = function () { add(m.tmdb_id, mediaType, this); };
+  modal.classList.add("open");
+  document.body.classList.add("modal-open");
+  _loadTrailer(m.tmdb_id, mediaType);
+}
+
+function closeDetail() {
+  modal.classList.remove("open");
+  document.body.classList.remove("modal-open");
+  _openDetailId = null;
+}
+document.getElementById("closeModal").addEventListener("click", closeDetail);
+modal.addEventListener("click", e => { if (e.target === modal) closeDetail(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && modal.classList.contains("open")) closeDetail(); });
+
+function renderModalBody(m) {
+  const watched = !!m.watched;
+  const icon = m.type === "series" ? "📺" : "🎬";
+  const isAvailable = (m.name || "").startsWith("✅");
+  const isSeries = m.type === "series";
+  const notAvailable = (m.name || "").startsWith("⏳");
+  const id = JSON.stringify(m.id);
+
+  modalHero.style.backgroundImage = m.poster ? `url('${m.poster}')` : "none";
+
+  const toggle = watched
+    ? `<button class="ghost small" onclick='setWatched(${id}, false, this)'>↩︎ Remettre à voir</button>`
+    : `<button class="ghost small" onclick='setWatched(${id}, true, this)'>✓ Marquer vu</button>`;
+
+  const downloadBtn = (!watched && isAvailable && !isSeries)
+    ? `<button class="ghost small" onclick='downloadFilm(${id}, this)'>⬇️ Télécharger</button>` : "";
+
+  let pcStatusHtml = "";
+  let precacheBtn = "";
+  if (!watched && notAvailable) {
+    if (isSeries) {
+      const seasons = m.precache_seasons || {};
+      const seasonNums = Object.keys(seasons).map(Number).sort((a, b) => a - b);
+      let verifyBtns = "";
+      for (const s of seasonNums) {
+        const ps = seasons[s];
+        const st = seasonStatusHtml(m.id, s, ps.episodes, ps.total);
+        pcStatusHtml += `<div class="pc-status" id="pc-${escapeHtml(m.id)}-${s}">${st.html}</div>`;
+        if (st.pending > 0 || st.stuckCount > 0) {
+          verifyBtns += `<button class="ghost small" id="verify-${escapeHtml(m.id)}-${s}" onclick='checkPrecacheSeason(${id}, ${s}, this)'>🔄 Vérifier S${s}</button>`;
+        }
+      }
+      const maxAttr = m.seasons ? ` max="${m.seasons}"` : "";
+      const nextSeason = seasonNums.length ? Math.max(...seasonNums) + 1 : 1;
+      precacheBtn = `<div class="modal-actions">${verifyBtns}<span class="season-precache">
+        <input type="number" min="1"${maxAttr} value="${nextSeason}" class="season-input" id="season-${escapeHtml(m.id)}">
+        <button class="ghost small" onclick='precacheSeason(${id}, this)'>📥 Précharger la saison</button></span></div>`;
+    } else {
+      precacheBtn = `<div class="modal-actions"><button class="ghost small" onclick='precache(${id}, this)'>📥 Précharger</button></div>`;
+    }
+  }
+
+  modalContent.innerHTML = `
+    <div class="modal-top">
+      <div class="modal-poster">${m.poster ? `<img src="${m.poster}" alt="">` : `<div class="noposter">${escapeHtml(m.name)}</div>`}</div>
+      <div class="modal-title">
+        <h2>${escapeHtml(_stripBadgeJs(m.name))}</h2>
+        <div class="hero-meta">
+          <span class="pill">${icon} ${m.type === "series" ? "Série" : "Film"}</span>
+          ${m.releaseInfo ? `<span class="pill">${escapeHtml(m.releaseInfo)}</span>` : ""}
+          <span class="pill">${watched ? "👁 Vu" : isAvailable ? "✅ Disponible" : "⏳ En cours"}</span>
+        </div>
+      </div>
+    </div>
+    ${m.description ? `<p class="modal-desc">${escapeHtml(m.description)}</p>` : ""}
+    <div class="modal-actions">${toggle}${downloadBtn}<button class="danger" onclick='remove(${id}, this)'>Retirer de la liste</button></div>
+    ${(pcStatusHtml || precacheBtn) ? `<div class="detail-card"><b>Pré-cache AllDebrid</b><div id="pc-${escapeHtml(m.id)}" style="margin-top:.5rem">${pcStatusHtml}</div>${precacheBtn}</div>` : ""}
+    <div id="trailer-slot"></div>
+  `;
+  _loadTrailer(m.tmdb_id, m.type);
+}
+
+async function downloadFilm(imdbId, btn) {
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = "⏳ ...";
+  try {
+    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download", { headers: headers() });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Erreur de téléchargement");
+    const a = document.createElement("a");
+    a.href = data.download_url;
+    a.download = data.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    alert("❌ " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function precache(imdbId, btn) {
+  btn.disabled = true;
+  btn.textContent = "⏳ ...";
+  const statusEl = document.getElementById("pc-" + imdbId);
+  try {
+    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache", { method: "POST", headers: headers() });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Erreur pré-cache");
+    if (data.status === "cached") { statusEl.innerHTML = "✅ Déjà disponible"; btn.remove(); }
+    else if (data.status === "none") { statusEl.innerHTML = "⚠️ Aucune source de qualité trouvée"; btn.disabled = false; btn.textContent = "📥 Précharger"; }
+    else if (data.status === "too_recent") { statusEl.innerHTML = "⚠️ " + escapeHtml(data.detail || "Sorti trop récemment"); btn.disabled = false; btn.textContent = "📥 Précharger"; }
+    else if (data.status === "ready") { statusEl.innerHTML = "✅ Prêt ! Lisible dans Stremio"; btn.remove(); }
+    else {
+      statusEl.innerHTML = `⏳ Téléchargement lancé (${data.resolution || "?"}p, ${data.size_gb || "?"} Go)…`;
+      btn.textContent = "🔄 Vérifier"; btn.disabled = false;
+      btn.setAttribute("onclick", `checkPrecache(${JSON.stringify(imdbId)}, this)`);
+    }
+  } catch (e) {
+    statusEl.innerHTML = "❌ " + escapeHtml(e.message);
+    btn.disabled = false; btn.textContent = "📥 Précharger";
+  }
+}
+
+async function checkPrecache(imdbId, btn) {
+  btn.disabled = true;
+  btn.textContent = "⏳ ...";
+  const statusEl = document.getElementById("pc-" + imdbId);
+  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache", { headers: headers() });
+  const data = await r.json();
+  if (data.status === "ready") { statusEl.innerHTML = "✅ Prêt ! Lisible dans Stremio"; btn.remove(); }
+  else if (data.status === "failed") {
+    statusEl.innerHTML = "❌ Échec du téléchargement";
+    btn.textContent = "📥 Réessayer";
+    btn.setAttribute("onclick", `precache(${JSON.stringify(imdbId)}, this)`);
+    btn.disabled = false;
+  } else {
+    statusEl.innerHTML = `⏳ Téléchargement en cours… ${data.downloaded_pct || 0}%`;
+    btn.textContent = "🔄 Vérifier"; btn.disabled = false;
+  }
+}
+
+async function precacheSeason(imdbId, btn) {
+  const input = document.getElementById("season-" + imdbId);
+  const season = parseInt(input.value, 10) || 1;
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "⏳ ...";
+  const statusEl = document.getElementById("pc-" + imdbId);
+  try {
+    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season", {
+      method: "POST", headers: headers(), body: JSON.stringify({ season })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Erreur pré-cache saison");
+    let row = document.getElementById(`pc-${imdbId}-${season}`);
+    if (!row) {
+      row = document.createElement("div");
+      row.className = "pc-status";
+      row.id = `pc-${imdbId}-${season}`;
+      statusEl.appendChild(row);
+    }
+    row.innerHTML = `⏳ Saison ${season} : lancé sur ${data.total} épisode(s)…`;
+    let verifyBtn = document.getElementById(`verify-${imdbId}-${season}`);
+    if (!verifyBtn) {
+      verifyBtn = document.createElement("button");
+      verifyBtn.className = "ghost small";
+      verifyBtn.id = `verify-${imdbId}-${season}`;
+      btn.parentElement.insertAdjacentElement("beforebegin", verifyBtn);
+    }
+    verifyBtn.textContent = "🔄 Vérifier S" + season;
+    verifyBtn.onclick = () => checkPrecacheSeason(imdbId, season, verifyBtn);
+  } catch (e) {
+    toast("❌ " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+function seasonStatusHtml(imdbId, season, episodes, total) {
+  const entries = Object.entries(episodes || {});
+  const done = entries.filter(([, i]) => i.status === "ready" || i.status === "cached").length;
+  const stuckEntries = entries.filter(([, i]) => i.status === "failed" || i.status === "none");
+  const tooRecent = entries.filter(([, i]) => i.status === "too_recent").length;
+  const pending = entries.length - done - stuckEntries.length - tooRecent;
+
+  let html = `<b>Saison ${season}</b> : ${done}/${total || entries.length} prêt(s)`;
+  if (pending > 0) html += `, ${pending} en cours`;
+  const unavailable = stuckEntries.length + tooRecent;
+  if (unavailable > 0) html += `, ${unavailable} indisponible(s)`;
+
+  if (stuckEntries.length) {
+    html += '<div class="ep-manual">';
+    for (const [ep, info] of stuckEntries) {
+      const inputId = `magnet-${imdbId}-${season}-${ep}`;
+      html += `<div class="ep-row">Ép. ${ep} (${info.status === "none" ? "aucune source" : "échec"})
+        <input type="text" placeholder="coller un magnet trouvé ailleurs" class="magnet-input" id="${inputId}">
+        <button class="ghost small" onclick='addMagnetEpisode(${JSON.stringify(imdbId)}, ${season}, ${ep}, this)'>Ajouter</button></div>`;
+    }
+    html += "</div>";
+  }
+  return { html, pending, stuckCount: stuckEntries.length };
+}
+
+async function checkPrecacheSeason(imdbId, season, btn) {
+  btn.disabled = true;
+  btn.textContent = "⏳ ...";
+  const row = document.getElementById(`pc-${imdbId}-${season}`);
+  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season/" + season, { headers: headers() });
+  const data = await r.json();
+  const { html, pending, stuckCount } = seasonStatusHtml(imdbId, season, data.episodes, data.total);
+  if (row) row.innerHTML = html;
+  if (pending === 0 && stuckCount === 0) { btn.remove(); }
+  else { btn.textContent = "🔄 Vérifier S" + season; btn.disabled = false; }
+}
+
+async function addMagnetEpisode(imdbId, season, ep, btn) {
+  const input = document.getElementById(`magnet-${imdbId}-${season}-${ep}`);
+  const magnet = input.value.trim();
+  if (!magnet.startsWith("magnet:")) { toast("Lien magnet invalide"); return; }
+  btn.disabled = true;
+  btn.textContent = "…";
+  const r = await fetch(`${BASE}/api/watchlist/${imdbId}/precache-season/${season}/episode/${ep}/magnet`, {
+    method: "POST", headers: headers(), body: JSON.stringify({ magnet })
+  });
+  const data = await r.json();
+  if (!r.ok) { toast(data.detail || "Échec de l'ajout"); btn.disabled = false; btn.textContent = "Ajouter"; return; }
+  toast(data.status === "ready" ? "Prêt immédiatement !" : "Téléchargement lancé");
+  input.disabled = true;
+  btn.remove();
 }
 
 async function setWatched(imdbId, watched, btn) {
@@ -232,7 +920,7 @@ async function setWatched(imdbId, watched, btn) {
 async function remove(imdbId, btn) {
   btn.disabled = true;
   const r = await fetch(`${BASE}/api/watchlist/` + imdbId, { method: "DELETE", headers: headers() });
-  if (r.ok) { toast("Retiré"); reloadWatchlist(); } else { btn.disabled = false; }
+  if (r.ok) { toast("Retiré"); closeDetail(); reloadWatchlist(); } else { btn.disabled = false; }
 }
 
 function escapeHtml(s) {

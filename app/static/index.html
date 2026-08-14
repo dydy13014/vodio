@@ -906,14 +906,21 @@ function copyToClipboard(text) {
 // Liste détaillée des sources (façon Ludio) — repli manuel pour choisir
 // soi-même quand le bouton Télécharger automatique ne convient pas.
 let _sourcesOpenId = null;
+// Cache des sources affichées : les onclick n'interpolent plus que des
+// index entiers (toujours sûrs), plus jamais link/playback_url/titre bruts
+// dans un attribut HTML — un titre contenant une apostrophe cassait
+// l'échappement précédent (relevé par une revue GLM, 2026-08-15).
+let _sourcesCache = [];
+
 async function toggleSources(imdbId, btn) {
   const slot = document.getElementById("sources-slot");
-  if (_sourcesOpenId === imdbId) { slot.innerHTML = ""; _sourcesOpenId = null; return; }
+  if (_sourcesOpenId === imdbId) { slot.innerHTML = ""; _sourcesOpenId = null; _sourcesCache = []; return; }
   _sourcesOpenId = imdbId;
   slot.innerHTML = '<p class="empty">Recherche des sources…</p>';
   const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/sources", { headers: headers() });
   if (!r.ok) { slot.innerHTML = '<p class="empty">Erreur de recherche</p>'; return; }
   const { sources } = await r.json();
+  _sourcesCache = sources;
   if (!sources.length) { slot.innerHTML = '<p class="empty">Aucune source trouvée pour le moment.</p>'; return; }
   slot.innerHTML = '<div class="found-list">' + sources.map((f, idx) => {
     const size = f.size_gb ? `${f.size_gb} Go` : "taille inconnue";
@@ -925,26 +932,37 @@ async function toggleSources(imdbId, btn) {
     // Toute la carte est cliquable (une seule action possible ici,
     // contrairement aux sources Wacustom qui ont copier + AllDebrid).
     if (f.lumio_playback_url) {
-      const pu = f.lumio_playback_url.replace(/'/g, "\\'");
-      const fn = (f.title || "").replace(/'/g, "\\'");
       return `
-      <div class="found-item clickable" id="src-lumio-${idx}" onclick="resolveLumioSource(${idx}, '${pu}', '${fn}', '${escapeHtml(imdbId)}', this)">
+      <div class="found-item clickable" id="src-lumio-${idx}" onclick="resolveLumioSourceByIndex(${idx}, this)">
         ${title}${meta}
       </div>`;
     }
 
-    const link = (f.link || "").replace(/'/g, "\\'");
     const isMagnet = (f.link || "").startsWith("magnet:");
     return `
     <div class="found-item">
       ${title}${meta}
       <div class="fi-actions">
-        <a class="copy" onclick="copyToClipboard('${link}')">copier</a>
-        ${isMagnet ? `<button class="ghost small" style="padding:.25rem .55rem;min-height:auto;" onclick="startSourceDownload(${idx}, '${link}', '${escapeHtml(imdbId)}', this)">⬇️ AllDebrid</button>` : ""}
+        <a class="copy" onclick="copySourceLinkByIndex(${idx})">copier</a>
+        ${isMagnet ? `<button class="ghost small" style="padding:.25rem .55rem;min-height:auto;" onclick="startSourceDownloadByIndex(${idx}, this)">⬇️ AllDebrid</button>` : ""}
       </div>
     </div>
     ${isMagnet ? `<div id="src-ad-${idx}"></div>` : ""}`;
   }).join("") + "</div>";
+}
+
+function copySourceLinkByIndex(idx) {
+  copyToClipboard(_sourcesCache[idx].link || "");
+}
+
+function resolveLumioSourceByIndex(idx, card) {
+  const f = _sourcesCache[idx];
+  return resolveLumioSource(idx, f.lumio_playback_url, f.title, _sourcesOpenId, card);
+}
+
+function startSourceDownloadByIndex(idx, btn) {
+  const f = _sourcesCache[idx];
+  return startSourceDownload(idx, f.link, _sourcesOpenId, btn);
 }
 
 async function resolveLumioSource(idx, playbackUrl, filename, imdbId, card) {
@@ -1010,6 +1028,13 @@ async function recheckSourceStatus(idx, magnetId, imdbId, btn) {
   btn.textContent = "⏳ ...";
   const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download-source/" + magnetId, { headers: headers() });
   const data = await r.json();
+  if (!r.ok) {
+    const resultEl = document.getElementById("src-ad-" + idx);
+    if (resultEl) resultEl.innerHTML = `<div class="ad-error">❌ ${escapeHtml(data.detail || "Erreur")}</div>`;
+    btn.disabled = false;
+    btn.textContent = "🔄 Revérifier";
+    return;
+  }
   renderSourceADResult(idx, data, magnetId, imdbId, btn);
 }
 
@@ -1042,6 +1067,7 @@ async function checkPrecache(imdbId, btn) {
   const statusEl = document.getElementById("pc-" + imdbId);
   const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache", { headers: headers() });
   const data = await r.json();
+  if (!r.ok) { statusEl.innerHTML = "❌ " + escapeHtml(data.detail || "Erreur"); btn.textContent = "🔄 Vérifier"; btn.disabled = false; return; }
   if (data.status === "ready") { statusEl.innerHTML = "✅ Prêt ! Lisible dans Stremio"; btn.remove(); }
   else if (data.status === "failed") {
     statusEl.innerHTML = "❌ Échec du téléchargement";
@@ -1123,6 +1149,7 @@ async function checkPrecacheSeason(imdbId, season, btn) {
   const row = document.getElementById(`pc-${imdbId}-${season}`);
   const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season/" + season, { headers: headers() });
   const data = await r.json();
+  if (!r.ok) { if (row) row.innerHTML = "❌ " + escapeHtml(data.detail || "Erreur"); btn.textContent = "🔄 Vérifier S" + season; btn.disabled = false; return; }
   const { html, pending, stuckCount } = seasonStatusHtml(imdbId, season, data.episodes, data.total);
   if (row) row.innerHTML = html;
   if (pending === 0 && stuckCount === 0) { btn.remove(); }
@@ -1168,6 +1195,7 @@ document.getElementById("q").addEventListener("keydown", e => { if (e.key === "E
 document.getElementById("user").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
 document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
 document.getElementById("user").value = USER;
+loadVersionBadge();
 autoUnlock();
 
 if ("serviceWorker" in navigator) {

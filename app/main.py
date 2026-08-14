@@ -131,6 +131,15 @@ ALL_WATCHLISTS: list[tuple[str, Watchlist, bool]] = [("", watchlist, True)] + [
 # /api/login` ci-dessous. Clé = ce que l'utilisateur tape dans le champ Nom
 # ("" = compte principal, sauf si VODIO_DEFAULT_NAME lui donne un vrai nom).
 USERS: dict[str, dict] = {VODIO_DEFAULT_NAME: {"password": VODIO_PASSWORD, "watchlist": watchlist}}
+if VODIO_DEFAULT_NAME in EXTRA_USERS:
+    # Un compte additionnel portant le même nom que VODIO_DEFAULT_NAME
+    # écraserait silencieusement le compte principal sans ce garde-fou
+    # (relevé par une revue GLM, 2026-08-15).
+    log.warning(
+        "VODIO_EXTRA_USERS contient un nom identique à VODIO_DEFAULT_NAME (%r) — "
+        "ce compte additionnel écrase le compte principal, renomme-le",
+        VODIO_DEFAULT_NAME,
+    )
 USERS.update(EXTRA_USERS)
 
 
@@ -399,8 +408,15 @@ async def api_login(payload: dict):
     wl = _check_credentials(name, password)
     if wl is None:
         raise HTTPException(status_code=401, detail="Nom ou mot de passe invalide")
+    now = time.time()
+    # Purge opportuniste des jetons expirés à chaque connexion — sans ça
+    # SESSIONS ne redescend jamais tant que le conteneur tourne (relevé par
+    # une revue GLM, 2026-08-15). Peu d'utilisateurs ici, mais gratuit.
+    for old_token, session in list(SESSIONS.items()):
+        if session["expires"] < now:
+            del SESSIONS[old_token]
     token = secrets.token_urlsafe(32)
-    SESSIONS[token] = {"watchlist": wl, "expires": time.time() + SESSION_TTL_S}
+    SESSIONS[token] = {"watchlist": wl, "expires": now + SESSION_TTL_S}
     return {"token": token}
 
 
@@ -507,7 +523,11 @@ async def api_digital_releases(_: Watchlist = Depends(resolve_session)):
 
 
 @app.get("/api/changelog")
-async def api_changelog(_: Watchlist = Depends(resolve_session)):
+async def api_changelog():
+    """Public (pas de Depends(resolve_session)) : le contenu n'a rien de
+    sensible, et ça permet d'afficher le numéro de version sur l'écran de
+    connexion avant même d'être identifié (relevé par une revue GLM,
+    2026-08-15)."""
     return {"version": changelog.VERSION, "entries": changelog.CHANGELOG}
 
 

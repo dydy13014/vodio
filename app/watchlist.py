@@ -87,15 +87,22 @@ class Watchlist:
         """Mémorise l'ID du magnet lancé en pré-cache pour ce titre (permet de
         re-vérifier son avancement plus tard). None efface le suivi.
         `precache_started_at` sert à détecter un magnet mort (0 seeder) sans
-        attendre le timeout de 20 min d'AllDebrid — cf. availability."""
+        attendre le timeout de 20 min d'AllDebrid — cf. availability. Remis à
+        zéro dès que le magnet change réellement (`setdefault` seul laissait
+        l'ancien chrono si /precache était rappelé sur un nouveau candidat
+        sans être passé par le nettoyage magnet_id=None entre les deux —
+        relevé par une revue GLM, 2026-08-15)."""
         for i in self.items:
             if i["id"] == imdb_id:
                 if magnet_id is None:
                     i.pop("precache_magnet_id", None)
                     i.pop("precache_started_at", None)
                 else:
+                    if i.get("precache_magnet_id") != magnet_id:
+                        i["precache_started_at"] = time.time()
+                    else:
+                        i.setdefault("precache_started_at", time.time())
                     i["precache_magnet_id"] = magnet_id
-                    i.setdefault("precache_started_at", time.time())
                 self._save()
                 return True
         return False

@@ -367,33 +367,37 @@ async def _check_one_watchlist(
 
     best_cached, _, candidates = _scan_streams(streams, min_res, meta.get("type", "movie"))
 
-    # Garde-fou anti-CAM calculé une fois, appliqué à TOUS les signaux de
-    # disponibilité (best_cached Wacustom, signal externe Lumio, ET check
-    # AllDebrid actif) — pas seulement au dernier comme avant. Sous ce délai,
-    # aucune vraie source WEB-DL/BluRay ne peut exister ; un flux qui
-    # prétend l'être (même déjà tagué "⚡" par Wacustom ou confirmé par
-    # Lumio) est presque certainement un CAM déguisé (cas réel : Minions &
-    # Monsters, Toy Story 5, Vaiana). Repéré par une revue GLM le 2026-08-15
-    # : best_cached/extra_hit contournaient ce garde-fou jusqu'ici. Si la
-    # date de sortie reste indéterminable (days=None), on n'ajoute ni ne
-    # retire de protection (comportement précédent conservé) — bloquer à
-    # l'aveugle causerait plus de faux ⏳ sur du contenu ancien mal indexé
-    # que ça n'éviterait de faux ✅ sur du contenu récent.
+    is_series = meta.get("type") == "series"
+
+    # Garde-fou anti-CAM : sous ce délai depuis la sortie, aucune vraie
+    # source WEB-DL/BluRay légitime ne peut exister pour un FILM (fenêtre
+    # salle → VOD, 45-90j) — un flux qui prétend l'être est presque
+    # certainement un CAM déguisé (cas réel : Minions & Monsters, Toy Story
+    # 5, Vaiana). Ce raisonnement ne vaut PAS pour une série : ses épisodes
+    # sortent en WEB-DL le jour même de la diffusion, donc `release_date`
+    # (= date du premier épisode) ne dit rien sur la légitimité d'un cache
+    # trouvé pour un épisode récent. Régression du 2026-08-15 (revue GLM,
+    # étendait le garde-fou à best_cached/extra_hit) corrigée le même jour
+    # (revue Qwen) : le garde-fou étendu ne s'applique donc qu'aux films —
+    # le check AllDebrid actif, lui, reste protégé pour les deux types
+    # (comportement d'origine, jamais remis en cause). Si la date de sortie
+    # reste indéterminable (days=None), on n'ajoute ni ne retire de
+    # protection.
     days = _days_since_release(meta.get("release_date"))
     if days is None:
         days = _days_since_release(
             await tmdb.get_release_date(tmdb_api_key, meta["id"], meta.get("type", "movie"))
         )
     too_recent = days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK
+    too_recent_for_cached_signal = too_recent and not is_series
 
-    available = best_cached >= min_res and not too_recent
+    available = best_cached >= min_res and not too_recent_for_cached_signal
     checked_alldebrid = False
     extra_hit = False
 
     # Signal externe (rapide, gratuit) avant de consommer un check AllDebrid
     # actif : si déjà confirmé caché ailleurs, inutile de vérifier nous-mêmes.
-    if not available and not too_recent and _extra_check is not None:
-        is_series = meta.get("type") == "series"
+    if not available and not too_recent_for_cached_signal and _extra_check is not None:
         try:
             extra_hit = await _extra_check.is_cached(meta["id"], meta.get("type", "movie"), 1 if is_series else None, 1 if is_series else None)
         except Exception:
@@ -403,7 +407,9 @@ async def _check_one_watchlist(
     # Rien de déjà caché en ≥min_res : on vérifie/déclenche activement le
     # candidat torrent le plus plausible (le plus petit parmi ceux qui ont
     # passé le filtre de taille) — inutile si trop récent, cf. garde-fou
-    # ci-dessus.
+    # ci-dessus (ici, films ET séries : contrairement au cache déjà
+    # confirmé, un candidat non vérifié peut toujours être un CAM déguisé
+    # même pour une série).
     if not available and candidates and not too_recent:
         checked_alldebrid = True
         available = await alldebrid.is_cached(alldebrid_api_key, candidates[0][3])

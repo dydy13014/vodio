@@ -5,9 +5,16 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.13.0"
+VERSION = "0.14.0"
 
 CHANGELOG = [
+    {
+        "version": "0.14.0",
+        "date": "2026-08-15",
+        "changes": [
+            "Correction d'une régression : les séries récentes déjà en cache étaient marquées à tort « en cours » — le garde-fou anti-CAM ne s'applique désormais qu'aux films",
+        ],
+    },
     {
         "version": "0.13.0",
         "date": "2026-08-15",

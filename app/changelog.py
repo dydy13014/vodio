@@ -5,9 +5,17 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 
 CHANGELOG = [
+    {
+        "version": "0.12.0",
+        "date": "2026-08-15",
+        "changes": [
+            "Le bouton Télécharger liste maintenant toutes les sources trouvées pour un film (comme sur Ludio), triées de la plus légère à la plus lourde",
+            "Un clic sur une source lance directement le téléchargement, plus besoin de copier-coller un lien",
+        ],
+    },
     {
         "version": "0.11.0",
         "date": "2026-08-14",

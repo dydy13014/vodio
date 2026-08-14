@@ -593,6 +593,109 @@ async def api_precache_status(imdb_id: str, wl: Watchlist = Depends(resolve_sess
     return {"status": "downloading", "downloaded_pct": st["downloaded_pct"]}
 
 
+def _mediaflow_proxy_url(filename: str, link: str) -> str:
+    return (
+        f"{MEDIAFLOW_URL}/proxy/stream/{quote(filename)}"
+        f"?d={quote(link, safe='')}&api_password={quote(MEDIAFLOW_API_PASSWORD)}"
+    )
+
+
+async def _resolve_ready_download(magnet_id: int) -> dict | None:
+    """Fichier prêt côté AllDebrid → lien MediaFlow (portable, pas lié à
+    l'IP qui a débloqué). Partagé entre `/download`, `/sources` et leur
+    statut respectif pour ne pas dupliquer la construction de l'URL."""
+    file = await alldebrid.get_direct_link(ALLDEBRID_API_KEY, magnet_id)
+    if not file:
+        return None
+    return {"download_url": _mediaflow_proxy_url(file["filename"], file["link"]), "filename": file["filename"]}
+
+
+@app.get("/api/watchlist/{imdb_id}/sources")
+async def api_sources(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
+    """Liste détaillée des sources trouvées (façon Ludio) — repli manuel
+    quand l'utilisateur préfère choisir lui-même plutôt que le bouton
+    Télécharger automatique (`/download`, qui prend la meilleure sans
+    demander)."""
+    if not WACUSTOM_CONFIG:
+        return {"sources": []}
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+    sources = await availability.list_sources(WACUSTOM_URL, WACUSTOM_CONFIG, entry, QUALITY_MIN)
+    if not sources and MEDIAFLOW_API_PASSWORD and entry.get("type", "movie") == "movie":
+        # Wacustom n'a rien : même repli que /download (signal Lumio), pour
+        # que la liste explique pourquoi le bouton Télécharger fonctionne
+        # quand même malgré "aucune source" ici (cas réel signalé 2026-08-14).
+        # Listés sans résolution (0 appel Lumio) — l'utilisateur choisit
+        # ensuite lequel résoudre via /resolve-lumio (un seul appel, pour
+        # l'entrée choisie — demandé le 2026-08-15, la 1ʳᵉ version ne
+        # résolvait automatiquement qu'un seul candidat sans laisser de choix).
+        for c in await availability.find_lumio_candidates(entry):
+            sources.append({
+                "source": "Lumio",
+                "title": c["filename"],
+                "size_gb": c["size_gb"],
+                "resolution": None,
+                "cached": True,
+                "link": None,
+                "lumio_playback_url": c["playback_url"],
+            })
+    return {"sources": sources}
+
+
+@app.post("/api/watchlist/{imdb_id}/resolve-lumio")
+async def api_resolve_lumio(imdb_id: str, payload: dict, wl: Watchlist = Depends(resolve_session)):
+    """Résolution à la demande d'un candidat Lumio listé par `/sources` (1
+    appel Lumio, seulement pour l'entrée choisie par l'utilisateur)."""
+    if not MEDIAFLOW_API_PASSWORD:
+        raise HTTPException(status_code=503, detail="MediaFlow non configuré")
+    playback_url = (payload.get("playback_url") or "").strip()
+    filename = payload.get("filename") or "video.mkv"
+    resolved = await availability.resolve_lumio_link(playback_url)
+    if resolved is None:
+        raise HTTPException(status_code=502, detail="Résolution impossible (source expirée ou quota Lumio atteint)")
+    return {"download_url": _mediaflow_proxy_url(filename, resolved["url"]), "filename": filename}
+
+
+@app.post("/api/watchlist/{imdb_id}/download-source")
+async def api_download_source(imdb_id: str, payload: dict, wl: Watchlist = Depends(resolve_session)):
+    """Démarre AllDebrid pour un lien magnet choisi explicitement dans la
+    liste `/sources` (bouton ⬇️ AllDebrid par source, façon Ludio)."""
+    if not ALLDEBRID_API_KEY:
+        raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    if not MEDIAFLOW_API_PASSWORD:
+        raise HTTPException(status_code=503, detail="MediaFlow non configuré")
+    link = (payload.get("link") or "").strip()
+    if not link.startswith("magnet:"):
+        raise HTTPException(status_code=400, detail="Ce lien n'est pas un magnet — rien à démarrer automatiquement, copie-le et ouvre-le toi-même")
+    try:
+        result = await alldebrid.start_download(ALLDEBRID_API_KEY, link)
+    except alldebrid.AllDebridError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    if result["ready"]:
+        resolved = await _resolve_ready_download(result["id"])
+        if resolved:
+            return {"ready": True, "magnet_id": result["id"], **resolved}
+    return {"ready": False, "magnet_id": result["id"]}
+
+
+@app.get("/api/watchlist/{imdb_id}/download-source/{magnet_id}")
+async def api_download_source_status(imdb_id: str, magnet_id: int, wl: Watchlist = Depends(resolve_session)):
+    """Revérifie un téléchargement démarré via `/download-source` (polling
+    manuel côté page, bouton 🔄 Revérifier)."""
+    if not ALLDEBRID_API_KEY:
+        raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    st = await alldebrid.get_status(ALLDEBRID_API_KEY, magnet_id)
+    if st["failed"]:
+        return {"ready": False, "failed": True}
+    if not st["ready"]:
+        return {"ready": False, "failed": False, "downloaded_pct": st["downloaded_pct"]}
+    resolved = await _resolve_ready_download(magnet_id)
+    if resolved is None:
+        return {"ready": False, "failed": True}
+    return {"ready": True, **resolved}
+
+
 @app.get("/api/watchlist/{imdb_id}/download")
 async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
     """Lien de téléchargement direct d'un film disponible (watchlist
@@ -644,11 +747,10 @@ async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
                         "le moment"
                     ),
                 )
-            proxy_url = (
-                f"{MEDIAFLOW_URL}/proxy/stream/{quote(direct['filename'])}"
-                f"?d={quote(direct['url'], safe='')}&api_password={quote(MEDIAFLOW_API_PASSWORD)}"
-            )
-            return {"download_url": proxy_url, "filename": direct["filename"]}
+            return {
+                "download_url": _mediaflow_proxy_url(direct["filename"], direct["url"]),
+                "filename": direct["filename"],
+            }
         ddl_only = cand["status"] == "cached" and not cand.get("magnet")
         if cand.get("magnet"):
             magnets = [cand["magnet"]]
@@ -696,11 +798,7 @@ async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
     if not file:
         raise HTTPException(status_code=502, detail="Fichier introuvable ou magnet pas prêt")
 
-    proxy_url = (
-        f"{MEDIAFLOW_URL}/proxy/stream/{quote(file['filename'])}"
-        f"?d={quote(file['link'], safe='')}&api_password={quote(MEDIAFLOW_API_PASSWORD)}"
-    )
-    return {"download_url": proxy_url, "filename": file["filename"]}
+    return {"download_url": _mediaflow_proxy_url(file["filename"], file["link"]), "filename": file["filename"]}
 
 
 @app.post("/api/watchlist/{imdb_id}/precache-season")

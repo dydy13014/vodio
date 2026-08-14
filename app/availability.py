@@ -306,6 +306,57 @@ async def find_lumio_direct_link(meta: dict) -> dict | None:
     return await _extra_check.get_direct_link(meta["id"])
 
 
+async def find_lumio_candidates(meta: dict) -> list[dict]:
+    """Variante de `find_lumio_direct_link` pour la liste « Sources » : liste
+    plusieurs candidats Lumio sans les résoudre (0 appel supplémentaire),
+    laissant l'utilisateur choisir lequel résoudre — voir
+    `_private_cache_check.list_candidates`."""
+    if _extra_check is None:
+        return []
+    return await _extra_check.list_candidates(meta["id"])
+
+
+async def resolve_lumio_link(playback_url: str) -> dict | None:
+    """Résout à la demande un candidat renvoyé par `find_lumio_candidates`."""
+    if _extra_check is None:
+        return None
+    return await _extra_check.resolve_direct_link(playback_url)
+
+
+async def list_sources(wacustom_base: str, wacustom_config: str, meta: dict, min_res: int) -> list[dict]:
+    """Liste brute de toutes les sources trouvées par Wacustom pour un titre
+    (pas seulement la meilleure retenue par `find_precache_candidate`) — pour
+    un affichage détaillé façon Ludio, où l'utilisateur choisit lui-même la
+    source à débrider plutôt que de laisser VODIO décider automatiquement.
+    Chaque entrée : {"source", "title", "size_gb", "resolution", "cached",
+    "link"} — `link` est un magnet ou une URL DDL selon la source."""
+    streams = await wacustom.get_streams(
+        wacustom_base, wacustom_config, meta["id"], meta.get("type", "movie")
+    )
+    out = []
+    for s in streams:
+        name = s.get("name", "")
+        title = s.get("description") or s.get("title") or ""
+        text = f"{name} {title}"
+        link = wacustom.extract_link(s.get("url", ""))
+        if not link:
+            continue
+        res = stream_resolution(text)
+        if res < min_res:
+            continue
+        m = _SOURCE_RE.search(text)
+        out.append({
+            "source": m.group(1) if m else "Wacustom",
+            "title": title.strip()[:140] or name.strip()[:140],
+            "size_gb": _parse_size_gb(text),
+            "resolution": res,
+            "cached": _is_cached(text),
+            "link": link,
+        })
+    out.sort(key=lambda c: c["size_gb"] if c["size_gb"] is not None else float("inf"))
+    return out
+
+
 async def _check_one_watchlist(
     wacustom_base: str, wacustom_config: str, alldebrid_api_key: str,
     tmdb_api_key: str, meta: dict, min_res: int,

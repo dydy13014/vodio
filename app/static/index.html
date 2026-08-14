@@ -243,6 +243,20 @@
   .modal-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
   .detail-card { padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; font-size: .85rem; margin-top: .8rem; }
   .detail-card b { color: var(--text); }
+
+  /* ---------- Liste des sources (façon Ludio) ---------- */
+  .found-list { margin-top: .6rem; display: flex; flex-direction: column; gap: .5rem; }
+  .found-item { display: flex; flex-direction: column; gap: .4rem; padding: .6rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: .82rem; }
+  .found-item.clickable { cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+  .found-item.clickable:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+  .found-item .fi-title { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+  .found-item .fi-meta { color: var(--muted); font-size: .78rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .found-item .fi-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .found-item a.copy { color: var(--accent-2); cursor: pointer; font-weight: 700; flex-shrink: 0; padding: .25rem .55rem; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+  .found-item a.copy:hover { background: var(--accent); color: var(--accent-ink); }
+  .ad-pending, .ad-error { font-size: .78rem; color: var(--muted); padding: .35rem .2rem; }
+  .ad-error { color: var(--danger); }
+  .cached-badge { color: var(--ok); font-weight: 700; }
   /* ---------- Mises à jour ---------- */
   .changelog-entry { padding: 16px 0; border-bottom: 1px solid var(--border); }
   .changelog-entry:last-child { border-bottom: none; }
@@ -790,6 +804,7 @@ function closeDetail() {
   modal.classList.remove("open");
   document.body.classList.remove("modal-open");
   _openDetailId = null;
+  _sourcesOpenId = null;
 }
 document.getElementById("closeModal").addEventListener("click", closeDetail);
 modal.addEventListener("click", e => { if (e.target === modal) closeDetail(); });
@@ -809,8 +824,8 @@ function renderModalBody(m) {
     ? `<button class="ghost small" onclick='setWatched(${id}, false, this)'>↩︎ Remettre à voir</button>`
     : `<button class="ghost small" onclick='setWatched(${id}, true, this)'>✓ Marquer vu</button>`;
 
-  const downloadBtn = (!watched && isAvailable && !isSeries)
-    ? `<button class="ghost small" onclick='downloadFilm(${id}, this)'>⬇️ Télécharger</button>` : "";
+  const sourcesBtn = (!watched && !isSeries)
+    ? `<button class="ghost small" onclick='toggleSources(${id}, this)'>⬇️ Télécharger</button>` : "";
 
   let pcStatusHtml = "";
   let precacheBtn = "";
@@ -850,33 +865,152 @@ function renderModalBody(m) {
       </div>
     </div>
     ${m.description ? `<p class="modal-desc">${escapeHtml(m.description)}</p>` : ""}
-    <div class="modal-actions">${toggle}${downloadBtn}<button class="danger" onclick='remove(${id}, this)'>Retirer de la liste</button></div>
+    <div class="modal-actions">${toggle}${sourcesBtn}<button class="danger" onclick='remove(${id}, this)'>Retirer de la liste</button></div>
     ${(pcStatusHtml || precacheBtn) ? `<div class="detail-card"><b>Pré-cache AllDebrid</b><div id="pc-${escapeHtml(m.id)}" style="margin-top:.5rem">${pcStatusHtml}</div>${precacheBtn}</div>` : ""}
+    <div id="sources-slot"></div>
     <div id="trailer-slot"></div>
   `;
   _loadTrailer(m.tmdb_id, m.type);
 }
 
-async function downloadFilm(imdbId, btn) {
+function triggerDownload(url, filename) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function copyToClipboard(text) {
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    toast(ok ? "Lien copié" : "Copie impossible — sélectionne le lien manuellement");
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => toast("Lien copié")).catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+// Liste détaillée des sources (façon Ludio) — repli manuel pour choisir
+// soi-même quand le bouton Télécharger automatique ne convient pas.
+let _sourcesOpenId = null;
+async function toggleSources(imdbId, btn) {
+  const slot = document.getElementById("sources-slot");
+  if (_sourcesOpenId === imdbId) { slot.innerHTML = ""; _sourcesOpenId = null; return; }
+  _sourcesOpenId = imdbId;
+  slot.innerHTML = '<p class="empty">Recherche des sources…</p>';
+  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/sources", { headers: headers() });
+  if (!r.ok) { slot.innerHTML = '<p class="empty">Erreur de recherche</p>'; return; }
+  const { sources } = await r.json();
+  if (!sources.length) { slot.innerHTML = '<p class="empty">Aucune source trouvée pour le moment.</p>'; return; }
+  slot.innerHTML = '<div class="found-list">' + sources.map((f, idx) => {
+    const size = f.size_gb ? `${f.size_gb} Go` : "taille inconnue";
+    const meta = `<div class="fi-meta"><span>${escapeHtml(f.source)} · ${size}${f.resolution ? " · " + f.resolution + "p" : ""}</span>${f.cached ? ' <span class="cached-badge">⚡ en cache</span>' : ""}</div>`;
+    const title = `<div class="fi-title">${escapeHtml(f.title)}</div>`;
+
+    // Candidat Lumio pas encore résolu (pas d'appel Lumio tant que
+    // l'utilisateur n'a pas choisi celui-ci).
+    // Toute la carte est cliquable (une seule action possible ici,
+    // contrairement aux sources Wacustom qui ont copier + AllDebrid).
+    if (f.lumio_playback_url) {
+      const pu = f.lumio_playback_url.replace(/'/g, "\\'");
+      const fn = (f.title || "").replace(/'/g, "\\'");
+      return `
+      <div class="found-item clickable" id="src-lumio-${idx}" onclick="resolveLumioSource(${idx}, '${pu}', '${fn}', '${escapeHtml(imdbId)}', this)">
+        ${title}${meta}
+      </div>`;
+    }
+
+    const link = (f.link || "").replace(/'/g, "\\'");
+    const isMagnet = (f.link || "").startsWith("magnet:");
+    return `
+    <div class="found-item">
+      ${title}${meta}
+      <div class="fi-actions">
+        <a class="copy" onclick="copyToClipboard('${link}')">copier</a>
+        ${isMagnet ? `<button class="ghost small" style="padding:.25rem .55rem;min-height:auto;" onclick="startSourceDownload(${idx}, '${link}', '${escapeHtml(imdbId)}', this)">⬇️ AllDebrid</button>` : ""}
+      </div>
+    </div>
+    ${isMagnet ? `<div id="src-ad-${idx}"></div>` : ""}`;
+  }).join("") + "</div>";
+}
+
+async function resolveLumioSource(idx, playbackUrl, filename, imdbId, card) {
+  if (card.dataset.busy) return;
+  card.dataset.busy = "1";
+  card.classList.remove("clickable");
+  card.onclick = null;
+  const original = card.innerHTML;
+  card.innerHTML += '<div class="fi-meta">⏳ Résolution…</div>';
+  try {
+    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/resolve-lumio", {
+      method: "POST", headers: headers(),
+      body: JSON.stringify({ playback_url: playbackUrl, filename }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || "Résolution impossible");
+    triggerDownload(data.download_url, data.filename);
+    card.innerHTML = `<div class="fi-title">✅ Téléchargement lancé — ${escapeHtml(data.filename)}</div>`;
+  } catch (e) {
+    card.innerHTML = original + `<div class="ad-error">❌ ${escapeHtml(e.message)}</div>`;
+    card.classList.add("clickable");
+    card.onclick = () => resolveLumioSource(idx, playbackUrl, filename, imdbId, card);
+    delete card.dataset.busy;
+  }
+}
+
+function renderSourceADResult(idx, data, magnetId, imdbId, btn) {
+  const resultEl = document.getElementById("src-ad-" + idx);
+  if (data.ready) {
+    triggerDownload(data.download_url, data.filename);
+    resultEl.innerHTML = `<div class="found-item"><div class="fi-title">✅ Téléchargement lancé — ${escapeHtml(data.filename)}</div></div>`;
+    btn.style.display = "none";
+  } else if (data.failed) {
+    resultEl.innerHTML = '<div class="ad-error">❌ Échec AllDebrid (torrent mort ou fichier introuvable)</div>';
+    btn.style.display = "none";
+  } else {
+    resultEl.innerHTML = `<div class="ad-pending">⏳ Téléchargement lancé sur AllDebrid${data.downloaded_pct ? " (" + data.downloaded_pct + "%)" : ""}, pas encore prêt.</div>`;
+    btn.disabled = false;
+    btn.textContent = "🔄 Revérifier";
+    btn.setAttribute("onclick", `recheckSourceStatus(${idx}, ${magnetId}, '${escapeHtml(imdbId)}', this)`);
+  }
+}
+
+async function startSourceDownload(idx, magnet, imdbId, btn) {
   btn.disabled = true;
-  const original = btn.textContent;
   btn.textContent = "⏳ ...";
   try {
-    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download", { headers: headers() });
+    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download-source", {
+      method: "POST", headers: headers(), body: JSON.stringify({ link: magnet }),
+    });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || "Erreur de téléchargement");
-    const a = document.createElement("a");
-    a.href = data.download_url;
-    a.download = data.filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    if (!r.ok) throw new Error(data.detail || "Erreur AllDebrid");
+    renderSourceADResult(idx, data, data.magnet_id, imdbId, btn);
   } catch (e) {
-    alert("❌ " + e.message);
-  } finally {
+    document.getElementById("src-ad-" + idx).innerHTML = `<div class="ad-error">❌ ${escapeHtml(e.message)}</div>`;
     btn.disabled = false;
-    btn.textContent = original;
+    btn.textContent = "⬇️ AllDebrid";
   }
+}
+
+async function recheckSourceStatus(idx, magnetId, imdbId, btn) {
+  btn.disabled = true;
+  btn.textContent = "⏳ ...";
+  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download-source/" + magnetId, { headers: headers() });
+  const data = await r.json();
+  renderSourceADResult(idx, data, magnetId, imdbId, btn);
 }
 
 async function precache(imdbId, btn) {

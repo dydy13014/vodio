@@ -5,53 +5,19 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.14.0"
+VERSION = "0.9.0"
 
 CHANGELOG = [
     {
-        "version": "0.14.0",
-        "date": "2026-08-15",
-        "changes": [
-            "Correction d'une régression : les séries récentes déjà en cache étaient marquées à tort « en cours » — le garde-fou anti-CAM ne s'applique désormais qu'aux films",
-        ],
-    },
-    {
-        "version": "0.13.0",
-        "date": "2026-08-15",
-        "changes": [
-            "Connexion unifiée : le badge de version s'affiche maintenant dès l'écran de connexion",
-            "Garde-fou anti-CAM renforcé : protège aussi les films/séries déjà marqués « en cache » (Wacustom ou Lumio), pas seulement la vérification AllDebrid active",
-            "Correctifs internes suite à une revue de code (fuite mémoire des sessions, minuteur de pré-cache mal réinitialisé, messages d'erreur plus fiables)",
-        ],
-    },
-    {
-        "version": "0.12.0",
-        "date": "2026-08-15",
-        "changes": [
-            "Le bouton Télécharger liste maintenant toutes les sources trouvées pour un film (comme sur Ludio), triées de la plus légère à la plus lourde",
-            "Un clic sur une source lance directement le téléchargement, plus besoin de copier-coller un lien",
-        ],
-    },
-    {
-        "version": "0.11.0",
-        "date": "2026-08-14",
-        "changes": [
-            "Connexion unifiée : un seul formulaire Nom + mot de passe pour tous les comptes, plus besoin d'une URL différente par personne",
-        ],
-    },
-    {
-        "version": "0.10.0",
-        "date": "2026-08-14",
-        "changes": [
-            "Onglet « Mises à jour » (celui-ci) avec numéro de version affiché à côté du nom VODIO",
-        ],
-    },
-    {
         "version": "0.9.0",
-        "date": "2026-08-14",
+        "date": "2026-08-15",
         "changes": [
-            "Téléchargement plus robuste : repli automatique sur un lien déjà pré-résolu quand aucune source directe n'est trouvée",
-            "Message d'erreur plus clair quand aucun téléchargement n'est possible",
+            "Connexion unifiée : un seul formulaire Nom + mot de passe pour tous les comptes, plus besoin d'une URL différente par personne, badge de version affiché dès l'écran de connexion",
+            "Onglet « Mises à jour » (celui-ci) avec numéro de version à côté du nom VODIO",
+            "Le bouton Télécharger liste toutes les sources trouvées pour un film (comme sur Ludio), triées de la plus légère à la plus lourde, avec téléchargement direct en un clic",
+            "Repli automatique sur un lien déjà pré-résolu quand aucune source directe n'est trouvée, message d'erreur plus clair sinon",
+            "Garde-fou anti-CAM renforcé sur les films (protège aussi le contenu déjà marqué « en cache », pas seulement la vérification AllDebrid active)",
+            "Correctifs internes suite à une revue de code (fuite mémoire des sessions, minuteur de pré-cache mal réinitialisé, messages d'erreur plus fiables)",
         ],
     },
     {

@@ -6,15 +6,18 @@ Deux catalogues :
   mot de passe), avec badges de disponibilité ✅/⏳.
 
 Servi derrière Traefik en PathPrefix /vodio (stripprefix) : l'app expose tout à
-la racine. Manifest et catalogues restent publics (Stremio en a besoin) ; seules
-les routes de gestion `/api/*` exigent le mot de passe VODIO_PASSWORD.
+la racine. Manifest et catalogues Stremio restent publics ; seules les routes
+de gestion `/api/*` exigent une authentification.
 
-Multi-utilisateur (2026-07-22) : l'utilisateur par défaut garde exactement ses
-chemins historiques (`/`, `/manifest.json`, `watchlist.json`...). Chaque
-utilisateur supplémentaire (VODIO_EXTRA_USERS) a sa propre watchlist et son
-propre mot de passe, servis sous `/u/<nom>/...` (même structure de routes,
-construite par `build_user_router`) — installation Stremio séparée par
-personne. Le catalogue VOD/Cinéma (AlloCiné) reste partagé par tous.
+Multi-utilisateur (réécrit le 2026-08-14) : une seule
+page web / une seule URL pour tout le monde, avec un vrai formulaire nom +
+mot de passe. `POST /api/login` échange les identifiants contre un jeton de
+session (`resolve_session`, 2026-08-15) — plus de chemin distinct par
+personne (`/u/<nom>/` retiré) ni de mot de passe renvoyé en clair à chaque
+appel. Décision explicite : seul le compte principal
+(VODIO_PASSWORD/VODIO_DEFAULT_NAME) est réellement installé dans Stremio,
+donc les routes manifest/catalog Stremio restent sur ce seul compte — les
+comptes additionnels (VODIO_EXTRA_USERS) n'ont que la page web/API.
 """
 import asyncio
 import datetime
@@ -23,15 +26,16 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
-from . import alldebrid, availability, cinema_scraper, notify, scraper, tmdb
+from . import alldebrid, availability, changelog, cinema_scraper, notify, scraper, tmdb
 from .watchlist import Watchlist
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -44,6 +48,10 @@ DATA_FILE = Path(os.environ.get("DATA_FILE", "/app/data/catalog.json"))
 CINEMA_DATA_FILE = Path(os.environ.get("CINEMA_DATA_FILE", "/app/data/cinema.json"))
 WATCHLIST_FILE = os.environ.get("WATCHLIST_FILE", "/app/data/watchlist.json")
 VODIO_PASSWORD = os.environ.get("VODIO_PASSWORD", "")
+# Nom du compte principal dans le nouveau formulaire de connexion unifié —
+# facultatif, "" (défaut) = champ Nom laissé vide pour se connecter avec ce
+# compte (comportement historique conservé si la variable n'est pas définie).
+VODIO_DEFAULT_NAME = os.environ.get("VODIO_DEFAULT_NAME", "")
 STATIC_DIR = Path(__file__).parent / "static"
 # Badges ✅/⏳ via AIOStreams (config compte dydy) — désactivés si CONFIG absent
 STREAM_CHECK_URL = os.environ.get("STREAM_CHECK_URL", "http://aiostreams:3000")
@@ -92,9 +100,10 @@ watchlist = Watchlist(WATCHLIST_FILE)
 
 def _parse_extra_users(raw: str, data_dir: Path) -> dict[str, dict]:
     """`VODIO_EXTRA_USERS=nom1:motdepasse1,nom2:motdepasse2` — chaque nom
-    obtient sa propre watchlist (`watchlist_<nom>.json`) et son propre accès,
-    servis sous `/u/<nom>/`. L'utilisateur par défaut (VODIO_PASSWORD,
-    watchlist.json) n'est pas affecté par ce mécanisme."""
+    obtient sa propre watchlist (`watchlist_<nom>.json`) et son propre mot de
+    passe, choisis dans le formulaire de connexion unifié (champ Nom).
+    L'utilisateur par défaut (VODIO_PASSWORD, watchlist.json) n'est pas
+    affecté par ce mécanisme."""
     users: dict[str, dict] = {}
     for pair in raw.split(","):
         pair = pair.strip()
@@ -116,6 +125,13 @@ NOSMS_USERS = {n.strip() for n in os.environ.get("VODIO_NOSMS_USERS", "").split(
 ALL_WATCHLISTS: list[tuple[str, Watchlist, bool]] = [("", watchlist, True)] + [
     (name, u["watchlist"], name not in NOSMS_USERS) for name, u in EXTRA_USERS.items()
 ]
+
+# Table d'authentification unifiée (2026-08-14) : un seul formulaire nom + mot
+# de passe pour tous les comptes, vérifié par `_check_credentials`/`POST
+# /api/login` ci-dessous. Clé = ce que l'utilisateur tape dans le champ Nom
+# ("" = compte principal, sauf si VODIO_DEFAULT_NAME lui donne un vrai nom).
+USERS: dict[str, dict] = {VODIO_DEFAULT_NAME: {"password": VODIO_PASSWORD, "watchlist": watchlist}}
+USERS.update(EXTRA_USERS)
 
 
 def load_cache() -> None:
@@ -357,399 +373,476 @@ async def _run_precache_season(wl: Watchlist, imdb_id: str, season: int, episode
     log.info("précache saison %s (%s) terminé : %d épisode(s) traité(s)", season, imdb_id, episode_count)
 
 
-def build_user_router(wl: Watchlist, password: str) -> APIRouter:
-    """Construit l'ensemble des routes (Stremio + page web + API de gestion)
-    pour un utilisateur donné : sa propre watchlist, son propre mot de passe.
-    Le catalogue VOD/Cinéma (AlloCiné) reste partagé — mêmes fonctions
-    globales `state`/`state_cinema`, dupliquées uniquement pour que le
-    manifest de chaque utilisateur puisse les résoudre (Stremio préfixe
-    toutes les requêtes de ressources par l'URL du manifest installé)."""
-    router = APIRouter()
+# Authentification par jeton de session (2026-08-15) : remplace l'ancien
+# `resolve_user` qui exigeait de renvoyer le mot de passe en clair à CHAQUE
+# appel API. Désormais `POST /api/login` échange nom+mot de passe (une seule
+# fois) contre un jeton opaque, renvoyé ensuite en `Authorization: Bearer
+# <jeton>` sur chaque requête. Jetons en mémoire (perdus au redémarrage du
+# conteneur) — acceptable pour un usage familial : le client garde nom+mot de
+# passe en cache local pour se reconnecter silencieusement si besoin (cf.
+# `autoUnlock` côté page web), sans jamais les renvoyer à chaque appel.
+SESSION_TTL_S = 30 * 24 * 3600  # 30 jours
+SESSIONS: dict[str, dict] = {}  # token -> {"watchlist": Watchlist, "expires": float}
 
-    def require_pw(x_vodio_password: str = Header(default="")) -> None:
-        if not password or not hmac.compare_digest(x_vodio_password, password):
-            raise HTTPException(status_code=401, detail="Mot de passe invalide")
 
-    # ── Endpoints publics (Stremio) ─────────────────────────────────────────
-    @router.get("/manifest.json")
-    async def manifest_route():
-        return JSONResponse(MANIFEST, headers=CORS)
+def _check_credentials(name: str, password: str) -> Watchlist | None:
+    account = USERS.get(name)
+    if account is None or not account["password"] or not hmac.compare_digest(password, account["password"]):
+        return None
+    return account["watchlist"]
 
-    @router.get("/catalog/movie/vodio-new.json")
-    async def catalog_new():
-        metas = [_clean_name(m) for m in state["metas"]]
-        return JSONResponse({"metas": metas}, headers=CORS)
 
-    @router.get("/catalog/movie/vodio-watchlist.json")
-    async def catalog_watchlist_movie():
-        return JSONResponse({"metas": wl.metas("movie")}, headers=CORS_LIVE)
+@app.post("/api/login")
+async def api_login(payload: dict):
+    name = (payload.get("name") or "").strip()
+    password = payload.get("password") or ""
+    wl = _check_credentials(name, password)
+    if wl is None:
+        raise HTTPException(status_code=401, detail="Nom ou mot de passe invalide")
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = {"watchlist": wl, "expires": time.time() + SESSION_TTL_S}
+    return {"token": token}
 
-    @router.get("/catalog/series/vodio-watchlist.json")
-    async def catalog_watchlist_series():
-        return JSONResponse({"metas": wl.metas("series")}, headers=CORS_LIVE)
 
-    # ── Page web de gestion + assets PWA ────────────────────────────────────
-    @router.get("/")
-    async def home():
-        return FileResponse(STATIC_DIR / "index.html")
+def resolve_session(authorization: str = Header(default="")) -> Watchlist:
+    token = authorization.removeprefix("Bearer ").strip()
+    session = SESSIONS.get(token) if token else None
+    if session is None or session["expires"] < time.time():
+        SESSIONS.pop(token, None)
+        raise HTTPException(status_code=401, detail="Session invalide ou expirée")
+    return session["watchlist"]
 
-    @router.get("/manifest.webmanifest")
-    async def pwa_manifest():
-        return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
 
-    @router.get("/sw.js")
-    async def pwa_sw():
-        return FileResponse(
-            STATIC_DIR / "sw.js", media_type="application/javascript",
-            headers={"Service-Worker-Allowed": "./"},
-        )
+# ── Stremio (compte principal uniquement — seul compte réellement installé
+# dans Stremio, décision explicite du 2026-08-14 : les comptes additionnels
+# n'ont que la page web/API) ─────────────────────────────────────────────────
+@app.get("/manifest.json")
+async def manifest_route():
+    return JSONResponse(MANIFEST, headers=CORS)
 
-    @router.get("/{icon}.png")
-    async def pwa_icon(icon: str):
-        path = STATIC_DIR / f"{icon}.png"
-        if not path.is_file():
-            raise HTTPException(status_code=404)
-        return FileResponse(path, media_type="image/png")
 
-    # ── Endpoints de gestion (protégés) ─────────────────────────────────────
-    @router.get("/api/vod", dependencies=[Depends(require_pw)])
-    async def api_vod():
-        return {"items": state["metas"], "last_refresh": state["last_refresh"]}
+@app.get("/catalog/movie/vodio-new.json")
+async def catalog_new():
+    metas = [_clean_name(m) for m in state["metas"]]
+    return JSONResponse({"metas": metas}, headers=CORS)
 
-    @router.get("/api/cinema", dependencies=[Depends(require_pw)])
-    async def api_cinema():
-        return {"items": state_cinema["metas"], "last_refresh": state_cinema["last_refresh"]}
 
-    @router.get("/api/search", dependencies=[Depends(require_pw)])
-    async def api_search(q: str):
-        if not q.strip():
-            return {"results": []}
-        return {"results": await tmdb.search_titles(TMDB_API_KEY, q)}
+@app.get("/catalog/movie/vodio-watchlist.json")
+async def catalog_watchlist_movie():
+    return JSONResponse({"metas": watchlist.metas("movie")}, headers=CORS_LIVE)
 
-    @router.get("/api/trailer/{tmdb_id}", dependencies=[Depends(require_pw)])
-    async def api_trailer(tmdb_id: int, media_type: str = "movie"):
-        return {"key": await tmdb.get_trailer(TMDB_API_KEY, tmdb_id, media_type)}
 
-    @router.get("/api/trending", dependencies=[Depends(require_pw)])
-    async def api_trending():
-        return {"items": await tmdb.get_trending(TMDB_API_KEY)}
+@app.get("/catalog/series/vodio-watchlist.json")
+async def catalog_watchlist_series():
+    return JSONResponse({"metas": watchlist.metas("series")}, headers=CORS_LIVE)
 
-    @router.get("/api/digital-releases", dependencies=[Depends(require_pw)])
-    async def api_digital_releases():
-        return {"items": await tmdb.get_digital_releases(TMDB_API_KEY)}
 
-    @router.get("/api/watchlist", dependencies=[Depends(require_pw)])
-    async def api_watchlist():
-        # all_items inclut les vus (flag watched) pour la section « Déjà vus » de l'UI.
-        return {"items": wl.all_items()}
+# ── Page web de gestion + assets PWA (partagés, une seule URL pour tous) ────
+@app.get("/")
+async def home():
+    return FileResponse(STATIC_DIR / "index.html")
 
-    @router.post("/api/watchlist", dependencies=[Depends(require_pw)])
-    async def api_add(payload: dict):
-        tmdb_id = payload.get("tmdb_id")
-        media_type = payload.get("media_type", "movie")
-        if not tmdb_id:
-            raise HTTPException(status_code=400, detail="tmdb_id requis")
-        meta = await tmdb.build_meta_from_tmdb(TMDB_API_KEY, int(tmdb_id), media_type)
-        if not meta:
-            raise HTTPException(status_code=404, detail="Titre introuvable ou sans ID IMDb")
-        entry = wl.add(meta)  # stocké immédiatement, badge calculé après
-        if entry is not None:
-            asyncio.create_task(_badge_and_persist(wl, entry))
-        return {"added": entry is not None, "item": entry}
 
-    @router.post("/api/watchlist/{imdb_id}/watched", dependencies=[Depends(require_pw)])
-    async def api_watched(imdb_id: str, payload: dict):
-        return {"ok": wl.set_watched(imdb_id, bool(payload.get("watched", True)))}
+@app.get("/manifest.webmanifest")
+async def pwa_manifest():
+    return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
 
-    @router.post("/api/watchlist/{imdb_id}/precache", dependencies=[Depends(require_pw)])
-    async def api_precache(imdb_id: str):
-        """Pré-cache à la demande : trouve le meilleur candidat torrent plausible
-        pour ce titre non-caché et déclenche son téléchargement sur AllDebrid.
-        Une fois prêt (statut re-vérifiable), le contenu devient lisible dans
-        Stremio via le flux normal (Wacustom)."""
-        if not (WACUSTOM_CONFIG and ALLDEBRID_API_KEY):
-            raise HTTPException(status_code=503, detail="Pré-cache non configuré (Wacustom/AllDebrid)")
-        entry = wl.get(imdb_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
 
+@app.get("/sw.js")
+async def pwa_sw():
+    return FileResponse(
+        STATIC_DIR / "sw.js", media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "./"},
+    )
+
+
+@app.get("/{icon}.png")
+async def pwa_icon(icon: str):
+    path = STATIC_DIR / f"{icon}.png"
+    if not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="image/png")
+
+
+# ── Anciennes URLs par personne (/u/<nom>/…, retirées le 2026-08-14) : simple
+# redirection vers l'accueil pour les favoris/PWA déjà installés côté client,
+# le nouveau formulaire de connexion prend le relais. ───────────────────────
+@app.get("/u/{name}/{rest:path}")
+async def legacy_user_url(name: str, rest: str = ""):
+    return RedirectResponse(url="/")
+
+
+# ── Endpoints de gestion (protégés, identité résolue depuis les identifiants
+# envoyés — X-Vodio-User / X-Vodio-Password) ────────────────────────────────
+@app.get("/api/vod")
+async def api_vod(_: Watchlist = Depends(resolve_session)):
+    return {"items": state["metas"], "last_refresh": state["last_refresh"]}
+
+
+@app.get("/api/cinema")
+async def api_cinema(_: Watchlist = Depends(resolve_session)):
+    return {"items": state_cinema["metas"], "last_refresh": state_cinema["last_refresh"]}
+
+
+@app.get("/api/search")
+async def api_search(q: str, _: Watchlist = Depends(resolve_session)):
+    if not q.strip():
+        return {"results": []}
+    return {"results": await tmdb.search_titles(TMDB_API_KEY, q)}
+
+
+@app.get("/api/trailer/{tmdb_id}")
+async def api_trailer(tmdb_id: int, media_type: str = "movie", _: Watchlist = Depends(resolve_session)):
+    return {"key": await tmdb.get_trailer(TMDB_API_KEY, tmdb_id, media_type)}
+
+
+@app.get("/api/trending")
+async def api_trending(_: Watchlist = Depends(resolve_session)):
+    return {"items": await tmdb.get_trending(TMDB_API_KEY)}
+
+
+@app.get("/api/digital-releases")
+async def api_digital_releases(_: Watchlist = Depends(resolve_session)):
+    return {"items": await tmdb.get_digital_releases(TMDB_API_KEY)}
+
+
+@app.get("/api/changelog")
+async def api_changelog(_: Watchlist = Depends(resolve_session)):
+    return {"version": changelog.VERSION, "entries": changelog.CHANGELOG}
+
+
+@app.get("/api/watchlist")
+async def api_watchlist(wl: Watchlist = Depends(resolve_session)):
+    # all_items inclut les vus (flag watched) pour la section « Déjà vus » de l'UI.
+    return {"items": wl.all_items()}
+
+
+@app.post("/api/watchlist")
+async def api_add(payload: dict, wl: Watchlist = Depends(resolve_session)):
+    tmdb_id = payload.get("tmdb_id")
+    media_type = payload.get("media_type", "movie")
+    if not tmdb_id:
+        raise HTTPException(status_code=400, detail="tmdb_id requis")
+    meta = await tmdb.build_meta_from_tmdb(TMDB_API_KEY, int(tmdb_id), media_type)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Titre introuvable ou sans ID IMDb")
+    entry = wl.add(meta)  # stocké immédiatement, badge calculé après
+    if entry is not None:
+        asyncio.create_task(_badge_and_persist(wl, entry))
+    return {"added": entry is not None, "item": entry}
+
+
+@app.post("/api/watchlist/{imdb_id}/watched")
+async def api_watched(imdb_id: str, payload: dict, wl: Watchlist = Depends(resolve_session)):
+    return {"ok": wl.set_watched(imdb_id, bool(payload.get("watched", True)))}
+
+
+@app.post("/api/watchlist/{imdb_id}/precache")
+async def api_precache(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
+    """Pré-cache à la demande : trouve le meilleur candidat torrent plausible
+    pour ce titre non-caché et déclenche son téléchargement sur AllDebrid.
+    Une fois prêt (statut re-vérifiable), le contenu devient lisible dans
+    Stremio via le flux normal (Wacustom)."""
+    if not (WACUSTOM_CONFIG and ALLDEBRID_API_KEY):
+        raise HTTPException(status_code=503, detail="Pré-cache non configuré (Wacustom/AllDebrid)")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+
+    cand = await availability.find_precache_candidate(
+        WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN
+    )
+    if cand["status"] == "cached":
+        return {"status": "cached", "detail": "Déjà disponible en cache"}
+    if cand["status"] == "none":
+        return {"status": "none", "detail": "Aucune source de qualité suffisante trouvée"}
+    if cand["status"] == "too_recent":
+        return {"status": "too_recent", "detail": f"Sorti il y a {cand['days']} j — pas encore de vraie source (CAM uniquement)"}
+
+    try:
+        result = await alldebrid.start_download(ALLDEBRID_API_KEY, cand["magnet"])
+    except alldebrid.AllDebridError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    wl.set_precache(imdb_id, result["id"])
+    return {
+        "status": "ready" if result["ready"] else "downloading",
+        "magnet_id": result["id"],
+        "size_gb": cand.get("size_gb"),
+        "resolution": cand.get("resolution"),
+    }
+
+
+@app.get("/api/watchlist/{imdb_id}/precache")
+async def api_precache_status(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
+    """Avancement d'un pré-cache lancé précédemment (polling depuis la page)."""
+    if not ALLDEBRID_API_KEY:
+        raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+    magnet_id = entry.get("precache_magnet_id")
+    if not magnet_id:
+        return {"status": "idle"}
+    st = await alldebrid.get_status(ALLDEBRID_API_KEY, magnet_id)
+    if st["ready"]:
+        return {"status": "ready", "downloaded_pct": 100}
+    if st["failed"] or _is_stalled(st, entry.get("precache_started_at")):
+        wl.set_precache(imdb_id, None)
+        return {"status": "failed"}
+    return {"status": "downloading", "downloaded_pct": st["downloaded_pct"]}
+
+
+@app.get("/api/watchlist/{imdb_id}/download")
+async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
+    """Lien de téléchargement direct d'un film disponible (watchlist
+    uniquement). Le lien AllDebrid est débloqué côté serveur puis relayé
+    via MediaFlow — un lien AllDebrid brut est lié à l'IP qui l'a
+    débloqué, MediaFlow permet de télécharger depuis n'importe quel réseau
+    (même principe qu'un partage manuel de lien MediaFlow).
+
+    Un badge ✅ ne veut PAS dire que VODIO a lui-même déclenché un
+    pré-cache (`precache_magnet_id` peut être absent — cas courant : le
+    titre était déjà caché ailleurs, trouvé directement par Wacustom, ou
+    via un signal externe/un check AllDebrid ponctuel, cf.
+    `_check_one_watchlist`). Si aucun magnet n'est encore suivi, on
+    retrouve le meilleur candidat via find_precache_candidate (même
+    logique que le bouton Précharger) et on le pousse sur AllDebrid —
+    quasi instantané si vraiment déjà caché (cohérent avec le badge ✅),
+    sinon on prévient l'utilisateur plutôt que de bloquer la requête."""
+    if not ALLDEBRID_API_KEY:
+        raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    if not MEDIAFLOW_API_PASSWORD:
+        raise HTTPException(status_code=503, detail="MediaFlow non configuré")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+    if entry.get("type", "movie") != "movie":
+        raise HTTPException(status_code=400, detail="Téléchargement disponible pour les films uniquement")
+
+    magnet_id = entry.get("precache_magnet_id")
+    if not magnet_id:
+        if not WACUSTOM_CONFIG:
+            raise HTTPException(status_code=409, detail="Film pas encore pré-caché")
         cand = await availability.find_precache_candidate(
             WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN
         )
-        if cand["status"] == "cached":
-            return {"status": "cached", "detail": "Déjà disponible en cache"}
-        if cand["status"] == "none":
-            return {"status": "none", "detail": "Aucune source de qualité suffisante trouvée"}
-        if cand["status"] == "too_recent":
-            return {"status": "too_recent", "detail": f"Sorti il y a {cand['days']} j — pas encore de vraie source (CAM uniquement)"}
+        if cand["status"] not in ("cached", "candidate"):
+            # Wacustom n'a plus aucune source pour ce film (cas du badge
+            # ✅⚡ obtenu uniquement via le "signal externe" Lumio, cf.
+            # `_check_one_watchlist` — le badge reflète alors la
+            # disponibilité en streaming Stremio, pas forcément un
+            # candidat téléchargeable). Repli : Lumio a parfois déjà un
+            # lien pré-résolu par leur propre infra debrid.
+            direct = await availability.find_lumio_direct_link(entry)
+            if direct is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Disponible en streaming via Stremio, mais aucune "
+                        "source téléchargeable trouvée pour ce film pour "
+                        "le moment"
+                    ),
+                )
+            proxy_url = (
+                f"{MEDIAFLOW_URL}/proxy/stream/{quote(direct['filename'])}"
+                f"?d={quote(direct['url'], safe='')}&api_password={quote(MEDIAFLOW_API_PASSWORD)}"
+            )
+            return {"download_url": proxy_url, "filename": direct["filename"]}
+        ddl_only = cand["status"] == "cached" and not cand.get("magnet")
+        if cand.get("magnet"):
+            magnets = [cand["magnet"]]
+        else:
+            magnets = cand.get("fallback_magnets") or []
+        if not magnets:
+            raise HTTPException(status_code=409, detail="Aucune source exploitable trouvée pour ce film")
 
+        # "cached" sans magnet direct : plusieurs candidats torrent tentés
+        # jusqu'à en trouver un déjà en cache partagé AllDebrid (le plus
+        # petit n'est pas forcément celui-là, cf. commentaire côté
+        # find_precache_candidate).
+        result = None
+        for magnet in magnets:
+            try:
+                r = await alldebrid.start_download(ALLDEBRID_API_KEY, magnet)
+            except alldebrid.AllDebridError:
+                continue
+            if r["ready"]:
+                result = r
+                break
+            result = result or r
+
+        if result is None:
+            raise HTTPException(status_code=502, detail="Échec AllDebrid sur toutes les sources candidates")
+        if not result["ready"] and ddl_only:
+            # Badge ✅ basé sur une source DDL (non téléchargeable par ce
+            # flux) ; aucun des candidats torrent tentés en repli n'est
+            # finalement déjà en cache non plus — pas de vrai
+            # téléchargement à lancer en douce pour un titre censé être
+            # "déjà disponible".
+            raise HTTPException(
+                status_code=409,
+                detail="Disponible uniquement via un lien direct (téléchargement pas encore pris en charge pour ce type de source)",
+            )
+        wl.set_precache(imdb_id, result["id"])
+        if not result["ready"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Mise en cache démarrée sur AllDebrid, réessaie dans quelques instants",
+            )
+        magnet_id = result["id"]
+
+    file = await alldebrid.get_direct_link(ALLDEBRID_API_KEY, magnet_id)
+    if not file:
+        raise HTTPException(status_code=502, detail="Fichier introuvable ou magnet pas prêt")
+
+    proxy_url = (
+        f"{MEDIAFLOW_URL}/proxy/stream/{quote(file['filename'])}"
+        f"?d={quote(file['link'], safe='')}&api_password={quote(MEDIAFLOW_API_PASSWORD)}"
+    )
+    return {"download_url": proxy_url, "filename": file["filename"]}
+
+
+@app.post("/api/watchlist/{imdb_id}/precache-season")
+async def api_precache_season(imdb_id: str, payload: dict, wl: Watchlist = Depends(resolve_session)):
+    """Lance le pré-cache de tous les épisodes d'une saison (à la demande),
+    en tâche de fond. Le statut se consulte via le GET du même chemin."""
+    if not (WACUSTOM_CONFIG and ALLDEBRID_API_KEY):
+        raise HTTPException(status_code=503, detail="Pré-cache non configuré (Wacustom/AllDebrid)")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+    if entry.get("type") != "series":
+        raise HTTPException(status_code=400, detail="Le pré-cache de saison ne s'applique qu'aux séries")
+    try:
+        season = int(payload.get("season", 1))
+    except (TypeError, ValueError):
+        season = 0
+    if season < 1:
+        raise HTTPException(status_code=400, detail="Numéro de saison invalide")
+
+    tmdb_id = entry.get("tmdb_id") or await tmdb.get_tmdb_id(TMDB_API_KEY, imdb_id, "series")
+    if not tmdb_id:
+        raise HTTPException(status_code=404, detail="tmdb_id introuvable pour ce titre")
+    count = await tmdb.get_season_episode_count(TMDB_API_KEY, tmdb_id, season)
+    if not count:
+        raise HTTPException(status_code=404, detail=f"Saison {season} introuvable ou vide")
+
+    wl.start_precache_season(imdb_id, season, count)
+    asyncio.create_task(_run_precache_season(wl, imdb_id, season, count))
+    return {"status": "started", "season": season, "total": count}
+
+
+@app.get("/api/watchlist/{imdb_id}/precache-season/{season}")
+async def api_precache_season_status(imdb_id: str, season: int, wl: Watchlist = Depends(resolve_session)):
+    """Avancement d'un pré-cache de saison lancé précédemment. Rafraîchit au
+    passage le statut AllDebrid des épisodes en téléchargement."""
+    if not ALLDEBRID_API_KEY:
+        raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+    ps = entry.get("precache_seasons", {}).get(str(season))
+    if not ps:
+        return {"status": "idle", "season": season}
+
+    sem = asyncio.Semaphore(3)
+
+    async def _retry_candidate(ep: str, info: dict) -> None:
+        """Cherche un nouveau candidat pour un épisode bloqué (magnet mort
+        confirmé, ou resté "échec"/"aucune source" faute d'une 2ᵉ chance —
+        cas réel 2026-07-20 : un timeout réseau passager avait empêché le
+        repli automatique de retrouver le pack C411, pourtant valide et
+        utilisé avec succès pour d'autres épisodes de la même saison). Exclut
+        les magnets déjà essayés pour ne jamais reboucler sur un torrent mort."""
+        tried = set(info.get("tried_magnets", []))
+        async with sem:
+            cand = await availability.find_precache_candidate(
+                WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN,
+                season, int(ep), exclude_magnets=tried,
+            )
+        if cand["status"] == "cached":
+            wl.set_precache_episode(imdb_id, season, int(ep), "cached")
+            return
+        if cand["status"] != "candidate":
+            # Toujours rien de neuf (aucune source, ou trop récent) : on
+            # laisse le statut existant tel quel plutôt que d'écraser un
+            # "échec" par un "aucune source" qui repartirait de zéro le suivi.
+            return
         try:
             result = await alldebrid.start_download(ALLDEBRID_API_KEY, cand["magnet"])
-        except alldebrid.AllDebridError as exc:
-            raise HTTPException(status_code=502, detail=str(exc))
-
-        wl.set_precache(imdb_id, result["id"])
-        return {
-            "status": "ready" if result["ready"] else "downloading",
-            "magnet_id": result["id"],
-            "size_gb": cand.get("size_gb"),
-            "resolution": cand.get("resolution"),
-        }
-
-    @router.get("/api/watchlist/{imdb_id}/precache", dependencies=[Depends(require_pw)])
-    async def api_precache_status(imdb_id: str):
-        """Avancement d'un pré-cache lancé précédemment (polling depuis la page)."""
-        if not ALLDEBRID_API_KEY:
-            raise HTTPException(status_code=503, detail="AllDebrid non configuré")
-        entry = wl.get(imdb_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
-        magnet_id = entry.get("precache_magnet_id")
-        if not magnet_id:
-            return {"status": "idle"}
-        st = await alldebrid.get_status(ALLDEBRID_API_KEY, magnet_id)
-        if st["ready"]:
-            return {"status": "ready", "downloaded_pct": 100}
-        if st["failed"] or _is_stalled(st, entry.get("precache_started_at")):
-            wl.set_precache(imdb_id, None)
-            return {"status": "failed"}
-        return {"status": "downloading", "downloaded_pct": st["downloaded_pct"]}
-
-    @router.get("/api/watchlist/{imdb_id}/download", dependencies=[Depends(require_pw)])
-    async def api_download(imdb_id: str):
-        """Lien de téléchargement direct d'un film disponible (watchlist
-        uniquement). Le lien AllDebrid est débloqué côté serveur puis relayé
-        via MediaFlow — un lien AllDebrid brut est lié à l'IP qui l'a
-        débloqué, MediaFlow permet de télécharger depuis n'importe quel réseau
-        (même principe qu'un partage manuel de lien MediaFlow).
-
-        Un badge ✅ ne veut PAS dire que VODIO a lui-même déclenché un
-        pré-cache (`precache_magnet_id` peut être absent — cas courant : le
-        titre était déjà caché ailleurs, trouvé directement par Wacustom, ou
-        via un signal externe/un check AllDebrid ponctuel, cf.
-        `_check_one_watchlist`). Si aucun magnet n'est encore suivi, on
-        retrouve le meilleur candidat via find_precache_candidate (même
-        logique que le bouton Précharger) et on le pousse sur AllDebrid —
-        quasi instantané si vraiment déjà caché (cohérent avec le badge ✅),
-        sinon on prévient l'utilisateur plutôt que de bloquer la requête."""
-        if not ALLDEBRID_API_KEY:
-            raise HTTPException(status_code=503, detail="AllDebrid non configuré")
-        if not MEDIAFLOW_API_PASSWORD:
-            raise HTTPException(status_code=503, detail="MediaFlow non configuré")
-        entry = wl.get(imdb_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
-        if entry.get("type", "movie") != "movie":
-            raise HTTPException(status_code=400, detail="Téléchargement disponible pour les films uniquement")
-
-        magnet_id = entry.get("precache_magnet_id")
-        if not magnet_id:
-            if not WACUSTOM_CONFIG:
-                raise HTTPException(status_code=409, detail="Film pas encore pré-caché")
-            cand = await availability.find_precache_candidate(
-                WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN
-            )
-            if cand["status"] not in ("cached", "candidate"):
-                raise HTTPException(status_code=409, detail="Aucune source exploitable trouvée pour ce film")
-            ddl_only = cand["status"] == "cached" and not cand.get("magnet")
-            if cand.get("magnet"):
-                magnets = [cand["magnet"]]
-            else:
-                magnets = cand.get("fallback_magnets") or []
-            if not magnets:
-                raise HTTPException(status_code=409, detail="Aucune source exploitable trouvée pour ce film")
-
-            # "cached" sans magnet direct : plusieurs candidats torrent tentés
-            # jusqu'à en trouver un déjà en cache partagé AllDebrid (le plus
-            # petit n'est pas forcément celui-là, cf. commentaire côté
-            # find_precache_candidate).
-            result = None
-            for magnet in magnets:
-                try:
-                    r = await alldebrid.start_download(ALLDEBRID_API_KEY, magnet)
-                except alldebrid.AllDebridError:
-                    continue
-                if r["ready"]:
-                    result = r
-                    break
-                result = result or r
-
-            if result is None:
-                raise HTTPException(status_code=502, detail="Échec AllDebrid sur toutes les sources candidates")
-            if not result["ready"] and ddl_only:
-                # Badge ✅ basé sur une source DDL (non téléchargeable par ce
-                # flux) ; aucun des candidats torrent tentés en repli n'est
-                # finalement déjà en cache non plus — pas de vrai
-                # téléchargement à lancer en douce pour un titre censé être
-                # "déjà disponible".
-                raise HTTPException(
-                    status_code=409,
-                    detail="Disponible uniquement via un lien direct (téléchargement pas encore pris en charge pour ce type de source)",
-                )
-            wl.set_precache(imdb_id, result["id"])
-            if not result["ready"]:
-                raise HTTPException(
-                    status_code=409,
-                    detail="Mise en cache démarrée sur AllDebrid, réessaie dans quelques instants",
-                )
-            magnet_id = result["id"]
-
-        file = await alldebrid.get_direct_link(ALLDEBRID_API_KEY, magnet_id)
-        if not file:
-            raise HTTPException(status_code=502, detail="Fichier introuvable ou magnet pas prêt")
-
-        proxy_url = (
-            f"{MEDIAFLOW_URL}/proxy/stream/{quote(file['filename'])}"
-            f"?d={quote(file['link'], safe='')}&api_password={quote(MEDIAFLOW_API_PASSWORD)}"
-        )
-        return {"download_url": proxy_url, "filename": file["filename"]}
-
-    @router.post("/api/watchlist/{imdb_id}/precache-season", dependencies=[Depends(require_pw)])
-    async def api_precache_season(imdb_id: str, payload: dict):
-        """Lance le pré-cache de tous les épisodes d'une saison (à la demande),
-        en tâche de fond. Le statut se consulte via le GET du même chemin."""
-        if not (WACUSTOM_CONFIG and ALLDEBRID_API_KEY):
-            raise HTTPException(status_code=503, detail="Pré-cache non configuré (Wacustom/AllDebrid)")
-        entry = wl.get(imdb_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
-        if entry.get("type") != "series":
-            raise HTTPException(status_code=400, detail="Le pré-cache de saison ne s'applique qu'aux séries")
-        try:
-            season = int(payload.get("season", 1))
-        except (TypeError, ValueError):
-            season = 0
-        if season < 1:
-            raise HTTPException(status_code=400, detail="Numéro de saison invalide")
-
-        tmdb_id = entry.get("tmdb_id") or await tmdb.get_tmdb_id(TMDB_API_KEY, imdb_id, "series")
-        if not tmdb_id:
-            raise HTTPException(status_code=404, detail="tmdb_id introuvable pour ce titre")
-        count = await tmdb.get_season_episode_count(TMDB_API_KEY, tmdb_id, season)
-        if not count:
-            raise HTTPException(status_code=404, detail=f"Saison {season} introuvable ou vide")
-
-        wl.start_precache_season(imdb_id, season, count)
-        asyncio.create_task(_run_precache_season(wl, imdb_id, season, count))
-        return {"status": "started", "season": season, "total": count}
-
-    @router.get("/api/watchlist/{imdb_id}/precache-season/{season}", dependencies=[Depends(require_pw)])
-    async def api_precache_season_status(imdb_id: str, season: int):
-        """Avancement d'un pré-cache de saison lancé précédemment. Rafraîchit au
-        passage le statut AllDebrid des épisodes en téléchargement."""
-        if not ALLDEBRID_API_KEY:
-            raise HTTPException(status_code=503, detail="AllDebrid non configuré")
-        entry = wl.get(imdb_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
-        ps = entry.get("precache_seasons", {}).get(str(season))
-        if not ps:
-            return {"status": "idle", "season": season}
-
-        sem = asyncio.Semaphore(3)
-
-        async def _retry_candidate(ep: str, info: dict) -> None:
-            """Cherche un nouveau candidat pour un épisode bloqué (magnet mort
-            confirmé, ou resté "échec"/"aucune source" faute d'une 2ᵉ chance —
-            cas réel 2026-07-20 : un timeout réseau passager avait empêché le
-            repli automatique de retrouver le pack C411, pourtant valide et
-            utilisé avec succès pour d'autres épisodes de la même saison). Exclut
-            les magnets déjà essayés pour ne jamais reboucler sur un torrent mort."""
-            tried = set(info.get("tried_magnets", []))
-            async with sem:
-                cand = await availability.find_precache_candidate(
-                    WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN,
-                    season, int(ep), exclude_magnets=tried,
-                )
-            if cand["status"] == "cached":
-                wl.set_precache_episode(imdb_id, season, int(ep), "cached")
-                return
-            if cand["status"] != "candidate":
-                # Toujours rien de neuf (aucune source, ou trop récent) : on
-                # laisse le statut existant tel quel plutôt que d'écraser un
-                # "échec" par un "aucune source" qui repartirait de zéro le suivi.
-                return
-            try:
-                result = await alldebrid.start_download(ALLDEBRID_API_KEY, cand["magnet"])
-            except alldebrid.AllDebridError:
-                return
-            wl.set_precache_episode(
-                imdb_id, season, int(ep),
-                "ready" if result["ready"] else "downloading", result["id"], magnet=cand["magnet"],
-            )
-
-        async def _refresh_ep(ep: str, info: dict) -> None:
-            status = info.get("status")
-            if status in ("failed", "none"):
-                await _retry_candidate(ep, info)
-                return
-            if status != "downloading" or "magnet_id" not in info:
-                return
-            async with sem:
-                st = await alldebrid.get_status(ALLDEBRID_API_KEY, info["magnet_id"])
-            if st["ready"]:
-                wl.set_precache_episode(imdb_id, season, int(ep), "ready", info["magnet_id"])
-                return
-            if not (st["failed"] or _is_stalled(st, info.get("started_at"))):
-                return
-            # Ce candidat est mort (ex. 0 seeder jamais reparti) : on retente
-            # automatiquement avec le prochain candidat plausible avant
-            # d'abandonner l'épisode — cas réel (2026-07-20) où le plus petit
-            # candidat automatique s'est révélé être un torrent mort.
-            await _retry_candidate(ep, info)
-
-        await asyncio.gather(*(_refresh_ep(ep, info) for ep, info in ps["episodes"].items()))
-
-        entry = wl.get(imdb_id)
-        ps = entry.get("precache_seasons", {}).get(str(season), {})
-        episodes = ps.get("episodes", {})
-        counts: dict[str, int] = {}
-        for info in episodes.values():
-            counts[info["status"]] = counts.get(info["status"], 0) + 1
-        return {"status": "ok", "season": season, "total": ps.get("total", len(episodes)), "counts": counts, "episodes": episodes}
-
-    @router.post(
-        "/api/watchlist/{imdb_id}/precache-season/{season}/episode/{episode}/magnet",
-        dependencies=[Depends(require_pw)],
-    )
-    async def api_precache_episode_magnet(imdb_id: str, season: int, episode: int, payload: dict):
-        """Ajout manuel d'un magnet pour un épisode précis — repli quand Wacustom
-        ne propose qu'un torrent mort (0 seeder) ou rien du tout : l'utilisateur
-        colle un lien trouvé lui-même (ex. directement sur un tracker) et VODIO le
-        suit exactement comme un candidat automatique."""
-        if not ALLDEBRID_API_KEY:
-            raise HTTPException(status_code=503, detail="AllDebrid non configuré")
-        magnet = (payload.get("magnet") or "").strip()
-        if not magnet.startswith("magnet:"):
-            raise HTTPException(status_code=400, detail="Lien magnet invalide")
-        entry = wl.get(imdb_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
-        ps = entry.get("precache_seasons", {}).get(str(season))
-        if not ps or str(episode) not in ps.get("episodes", {}):
-            raise HTTPException(status_code=404, detail="Aucun suivi de pré-cache pour cet épisode")
-
-        try:
-            result = await alldebrid.start_download(ALLDEBRID_API_KEY, magnet)
-        except alldebrid.AllDebridError as exc:
-            raise HTTPException(status_code=502, detail=str(exc))
-
+        except alldebrid.AllDebridError:
+            return
         wl.set_precache_episode(
-            imdb_id, season, episode, "ready" if result["ready"] else "downloading", result["id"], magnet=magnet,
+            imdb_id, season, int(ep),
+            "ready" if result["ready"] else "downloading", result["id"], magnet=cand["magnet"],
         )
-        return {"status": "ready" if result["ready"] else "downloading", "magnet_id": result["id"]}
 
-    @router.delete("/api/watchlist/{imdb_id}", dependencies=[Depends(require_pw)])
-    async def api_remove(imdb_id: str):
-        return {"removed": wl.remove(imdb_id)}
+    async def _refresh_ep(ep: str, info: dict) -> None:
+        status = info.get("status")
+        if status in ("failed", "none"):
+            await _retry_candidate(ep, info)
+            return
+        if status != "downloading" or "magnet_id" not in info:
+            return
+        async with sem:
+            st = await alldebrid.get_status(ALLDEBRID_API_KEY, info["magnet_id"])
+        if st["ready"]:
+            wl.set_precache_episode(imdb_id, season, int(ep), "ready", info["magnet_id"])
+            return
+        if not (st["failed"] or _is_stalled(st, info.get("started_at"))):
+            return
+        # Ce candidat est mort (ex. 0 seeder jamais reparti) : on retente
+        # automatiquement avec le prochain candidat plausible avant
+        # d'abandonner l'épisode — cas réel (2026-07-20) où le plus petit
+        # candidat automatique s'est révélé être un torrent mort.
+        await _retry_candidate(ep, info)
 
-    return router
+    await asyncio.gather(*(_refresh_ep(ep, info) for ep, info in ps["episodes"].items()))
+
+    entry = wl.get(imdb_id)
+    ps = entry.get("precache_seasons", {}).get(str(season), {})
+    episodes = ps.get("episodes", {})
+    counts: dict[str, int] = {}
+    for info in episodes.values():
+        counts[info["status"]] = counts.get(info["status"], 0) + 1
+    return {"status": "ok", "season": season, "total": ps.get("total", len(episodes)), "counts": counts, "episodes": episodes}
 
 
-app.include_router(build_user_router(watchlist, VODIO_PASSWORD))
-for _name, _udata in EXTRA_USERS.items():
-    app.include_router(build_user_router(_udata["watchlist"], _udata["password"]), prefix=f"/u/{_name}")
-    log.info("utilisateur additionnel enregistré : %s (/u/%s/)", _name, _name)
+@app.post("/api/watchlist/{imdb_id}/precache-season/{season}/episode/{episode}/magnet")
+async def api_precache_episode_magnet(
+    imdb_id: str, season: int, episode: int, payload: dict, wl: Watchlist = Depends(resolve_session),
+):
+    """Ajout manuel d'un magnet pour un épisode précis — repli quand Wacustom
+    ne propose qu'un torrent mort (0 seeder) ou rien du tout : l'utilisateur
+    colle un lien trouvé lui-même (ex. directement sur un tracker) et VODIO le
+    suit exactement comme un candidat automatique."""
+    if not ALLDEBRID_API_KEY:
+        raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    magnet = (payload.get("magnet") or "").strip()
+    if not magnet.startswith("magnet:"):
+        raise HTTPException(status_code=400, detail="Lien magnet invalide")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
+    ps = entry.get("precache_seasons", {}).get(str(season))
+    if not ps or str(episode) not in ps.get("episodes", {}):
+        raise HTTPException(status_code=404, detail="Aucun suivi de pré-cache pour cet épisode")
+
+    try:
+        result = await alldebrid.start_download(ALLDEBRID_API_KEY, magnet)
+    except alldebrid.AllDebridError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    wl.set_precache_episode(
+        imdb_id, season, episode, "ready" if result["ready"] else "downloading", result["id"], magnet=magnet,
+    )
+    return {"status": "ready" if result["ready"] else "downloading", "magnet_id": result["id"]}
+
+
+@app.delete("/api/watchlist/{imdb_id}")
+async def api_remove(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
+    return {"removed": wl.remove(imdb_id)}
 
 
 @app.get("/health")

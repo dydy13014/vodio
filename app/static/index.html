@@ -80,6 +80,12 @@
     background: linear-gradient(135deg, var(--accent), #8e0007); box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent);
     color: #fff; font-size: .95rem;
   }
+  .version-badge {
+    font-size: .68rem; font-weight: 700; color: var(--muted); background: color-mix(in srgb, var(--text) 7%, transparent);
+    border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem; margin-left: 2px; letter-spacing: .01em;
+  }
+  .version-badge.clickable { cursor: pointer; transition: color .15s ease, background .15s ease; }
+  .version-badge.clickable:hover { color: var(--text); background: color-mix(in srgb, var(--text) 13%, transparent); }
   .nav-links { display: flex; align-items: center; gap: 6px; }
   .tab {
     background: transparent; border: 0; border-radius: 999px; padding: .5rem 1rem;
@@ -237,6 +243,15 @@
   .modal-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
   .detail-card { padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; font-size: .85rem; margin-top: .8rem; }
   .detail-card b { color: var(--text); }
+  /* ---------- Mises à jour ---------- */
+  .changelog-entry { padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .changelog-entry:last-child { border-bottom: none; }
+  .changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .changelog-version { font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em; }
+  .changelog-date { color: var(--muted); font-size: .82rem; }
+  .changelog-entry ul { margin: 0; padding-left: 1.1rem; color: var(--text); font-size: .9rem; line-height: 1.6; }
+  .changelog-entry li { margin-bottom: 2px; }
+
   .season-precache { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
   .season-input { width: 3.6rem; }
   .ep-manual { margin-top: .4rem; display: flex; flex-direction: column; gap: .4rem; }
@@ -273,9 +288,12 @@
 </head>
 <body>
 <div id="gate">
-  <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span></div>
+  <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span><span class="version-badge" id="version-badge-gate"></span></div>
   <div class="row">
-    <input type="password" id="pw" placeholder="Mot de passe VODIO" autocomplete="current-password" style="flex:1">
+    <input type="text" id="user" placeholder="Nom" autocomplete="username" style="flex:1">
+  </div>
+  <div class="row">
+    <input type="password" id="pw" placeholder="Mot de passe" autocomplete="current-password" style="flex:1">
     <button class="btn" onclick="unlock()">Entrer</button>
   </div>
   <p class="empty" id="gate-err"></p>
@@ -284,7 +302,7 @@
 <div id="app" class="hidden">
   <header class="site-header" id="header">
     <div class="container nav-wrap">
-      <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span></div>
+      <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span><span class="version-badge clickable" id="version-badge" onclick="switchTab('changelog')" title="Voir les mises à jour"></span></div>
       <button class="menu-toggle" id="menuToggle" aria-label="Ouvrir le menu" aria-expanded="false">☰</button>
       <nav class="nav-links" id="navLinks">
         <button class="tab active" data-tab="mine" onclick="switchTab('mine')">Ma liste</button>
@@ -335,6 +353,11 @@
       <h2 class="section-title reveal">Sorties de la semaine</h2>
       <div id="cinema-grid" class="grid"></div>
     </div>
+
+    <div id="tab-changelog" class="hidden section">
+      <h2 class="section-title reveal">Mises à jour</h2>
+      <div id="changelog-list" style="max-width:640px"></div>
+    </div>
   </main>
 </div>
 
@@ -350,9 +373,24 @@
 
 <script>
 const BASE = location.pathname.replace(/\/+$/, "");
+let USER = localStorage.getItem("vodio_user") || "";
 let PW = localStorage.getItem("vodio_pw") || "";
+let TOKEN = localStorage.getItem("vodio_token") || "";
 
-function headers() { return { "X-Vodio-Password": PW, "Content-Type": "application/json" }; }
+function headers() { return { "Authorization": "Bearer " + TOKEN, "Content-Type": "application/json" }; }
+
+// Échange nom+mot de passe contre un jeton de session (une seule requête
+// avec le mot de passe en clair, au lieu d'un à chaque appel API).
+async function login() {
+  const r = await fetch(`${BASE}/api/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: USER, password: PW }),
+  });
+  if (!r.ok) return false;
+  TOKEN = (await r.json()).token;
+  localStorage.setItem("vodio_token", TOKEN);
+  return true;
+}
 function toast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
@@ -382,14 +420,39 @@ _menuToggle.addEventListener("click", () => {
 });
 
 async function unlock() {
+  USER = document.getElementById("user").value.trim();
   PW = document.getElementById("pw").value;
-  const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
-  if (r.status === 401) { document.getElementById("gate-err").textContent = "Mot de passe incorrect"; return; }
+  if (!(await login())) { document.getElementById("gate-err").textContent = "Nom ou mot de passe incorrect"; return; }
+  localStorage.setItem("vodio_user", USER);
   localStorage.setItem("vodio_pw", PW);
+  const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
   document.getElementById("gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   renderWatchlist((await r.json()).items);
   loadHero();
+  loadVersionBadge();
+}
+
+// Au chargement : essaie d'abord le jeton en cache (pas de mot de passe
+// renvoyé) ; s'il est absent/expiré mais que le nom+mot de passe sont encore
+// en cache, reconnexion silencieuse via unlock().
+async function autoUnlock() {
+  if (TOKEN) {
+    const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
+    if (r.ok) {
+      document.getElementById("gate").classList.add("hidden");
+      document.getElementById("app").classList.remove("hidden");
+      renderWatchlist((await r.json()).items);
+      loadHero();
+      loadVersionBadge();
+      return;
+    }
+  }
+  if (PW) {
+    document.getElementById("user").value = USER;
+    document.getElementById("pw").value = PW;
+    unlock();
+  }
 }
 
 // ---------- Bandeau héros : un titre au hasard parmi les nouveautés VOD disponibles ----------
@@ -487,7 +550,7 @@ async function add(tmdbId, mediaType, btn) {
 }
 
 // ---------- Onglets VOD / Cinéma (navigation + chargement paresseux) ----------
-const _tabLoaded = { vod: false, cinema: false };
+const _tabLoaded = { vod: false, cinema: false, changelog: false };
 let _vodCache = null;
 let _watchlistCache = [];
 
@@ -496,12 +559,52 @@ function switchTab(name) {
   document.getElementById("tab-mine").classList.toggle("hidden", name !== "mine");
   document.getElementById("tab-vod").classList.toggle("hidden", name !== "vod");
   document.getElementById("tab-cinema").classList.toggle("hidden", name !== "cinema");
+  document.getElementById("tab-changelog").classList.toggle("hidden", name !== "changelog");
   document.getElementById("hero").classList.toggle("hidden", name !== "mine" || !document.getElementById("hero-title").textContent);
   _navLinks.classList.remove("open");
   _menuToggle.setAttribute("aria-expanded", "false");
   _menuToggle.textContent = "☰";
   if (name === "vod" && !_tabLoaded.vod) { _tabLoaded.vod = true; loadVod(); }
   if (name === "cinema" && !_tabLoaded.cinema) { _tabLoaded.cinema = true; loadCinema(); }
+  if (name === "changelog" && !_tabLoaded.changelog) { _tabLoaded.changelog = true; loadChangelog(); }
+}
+
+let _changelogCache = null;
+
+async function loadVersionBadge() {
+  try {
+    if (!_changelogCache) {
+      const r = await fetch(`${BASE}/api/changelog`, { headers: headers() });
+      if (!r.ok) return;
+      _changelogCache = await r.json();
+    }
+    document.getElementById("version-badge").textContent = "v" + _changelogCache.version;
+    document.getElementById("version-badge-gate").textContent = "v" + _changelogCache.version;
+  } catch (e) { /* badge optionnel, la page reste utilisable sans */ }
+}
+
+async function loadChangelog() {
+  const box = document.getElementById("changelog-list");
+  box.innerHTML = '<p class="empty">Chargement…</p>';
+  if (!_changelogCache) {
+    const r = await fetch(`${BASE}/api/changelog`, { headers: headers() });
+    if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
+    _changelogCache = await r.json();
+  }
+  document.getElementById("version-badge").textContent = "v" + _changelogCache.version;
+  document.getElementById("version-badge-gate").textContent = "v" + _changelogCache.version;
+  box.innerHTML = "";
+  _changelogCache.entries.forEach(e => {
+    const el = document.createElement("div");
+    el.className = "changelog-entry";
+    el.innerHTML = `
+      <div class="changelog-head">
+        <span class="changelog-version">v${escapeHtml(e.version)}</span>
+        <span class="changelog-date">${escapeHtml(e.date)}</span>
+      </div>
+      <ul>${e.changes.map(c => `<li>${escapeHtml(c)}</li>`).join("")}</ul>`;
+    box.appendChild(el);
+  });
 }
 
 function _catalogCard(m, mediaType, extraChipHtml) {
@@ -928,8 +1031,10 @@ function escapeHtml(s) {
 }
 
 document.getElementById("q").addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+document.getElementById("user").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
 document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
-if (PW) unlock();
+document.getElementById("user").value = USER;
+autoUnlock();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});

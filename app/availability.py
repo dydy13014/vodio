@@ -294,6 +294,18 @@ async def find_precache_candidate(
     }
 
 
+async def find_lumio_direct_link(meta: dict) -> dict | None:
+    """Repli pour le téléchargement direct (film uniquement) quand Wacustom
+    ne renvoie aucun candidat exploitable : Lumio a parfois déjà un lien
+    pré-résolu par leur propre infrastructure debrid (signal utilisé pour le
+    badge ✅⚡, cf. `_check_one_watchlist`) même quand Wacustom lui-même n'a
+    plus aucune source — voir `_private_cache_check.get_direct_link`.
+    {"url", "filename"} ou None."""
+    if _extra_check is None:
+        return None
+    return await _extra_check.get_direct_link(meta["id"])
+
+
 async def _check_one_watchlist(
     wacustom_base: str, wacustom_config: str, alldebrid_api_key: str,
     tmdb_api_key: str, meta: dict, min_res: int,

@@ -420,6 +420,14 @@ async def _check_one_watchlist(
         )
 
     meta["name"] = ("✅⚡ " if available else "⏳ ") + _strip(meta["name"])
+    # ETA affichée côté page web (« dispo estimée dans ~N j ») — seulement
+    # pour un film indisponible à cause du garde-fou anti-CAM lui-même : pour
+    # une série, un ⏳ ne veut pas dire "trop tôt" de la même façon (cf.
+    # garde-fou scindé plus haut), une ETA y serait trompeuse.
+    if not available and not is_series and days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK:
+        meta["eta_days"] = MIN_DAYS_FOR_ACTIVE_CHECK - days
+    else:
+        meta.pop("eta_days", None)
     log.info(
         "%s %s : %d sources (direct Wacustom), cache=%dp, %d candidat(s) plausible(s)%s%s",
         meta["id"], meta["name"], len(streams), best_cached, len(candidates),

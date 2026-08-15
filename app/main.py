@@ -429,6 +429,15 @@ def resolve_session(authorization: str = Header(default="")) -> Watchlist:
     return session["watchlist"]
 
 
+@app.post("/api/logout")
+async def api_logout(authorization: str = Header(default="")):
+    """Révoque le jeton courant (bouton Déconnexion) — sans ça, un jeton
+    reste valable jusqu'à ses 30 jours même après un clic sur déconnexion."""
+    token = authorization.removeprefix("Bearer ").strip()
+    SESSIONS.pop(token, None)
+    return {"ok": True}
+
+
 # ── Stremio (compte principal uniquement — seul compte réellement installé
 # dans Stremio, décision explicite du 2026-08-14 : les comptes additionnels
 # n'ont que la page web/API) ─────────────────────────────────────────────────

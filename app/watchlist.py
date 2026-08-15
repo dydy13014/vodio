@@ -174,10 +174,16 @@ class Watchlist:
         return sorted(self.items, key=lambda i: i.get("added_at", 0), reverse=True)
 
     def replace_all(self, metas: list[dict]) -> None:
-        """Remplace les entrées (mêmes ids) après recalcul des badges."""
+        """Remplace les entrées (mêmes ids) après recalcul des badges. `metas`
+        sont des copies (cf. `_strip_badge`) — sans ce report explicite,
+        `eta_days` calculé dessus serait perdu au lieu d'être persisté."""
         by_id = {m["id"]: m for m in metas}
         for i in self.items:
             m = by_id.get(i["id"])
             if m:
                 i["name"] = m["name"]  # badge rafraîchi
+                if "eta_days" in m:
+                    i["eta_days"] = m["eta_days"]
+                else:
+                    i.pop("eta_days", None)
         self._save()

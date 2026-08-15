@@ -322,6 +322,7 @@
         <button class="tab active" data-tab="mine" onclick="switchTab('mine')">Ma liste</button>
         <button class="tab" data-tab="vod" onclick="switchTab('vod')">VOD</button>
         <button class="tab" data-tab="cinema" onclick="switchTab('cinema')">Cinéma</button>
+        <button class="tab" onclick="logout()">Déconnexion</button>
       </nav>
     </div>
   </header>
@@ -405,6 +406,41 @@ async function login() {
   localStorage.setItem("vodio_token", TOKEN);
   return true;
 }
+
+// Enveloppe fetch pour les appels API protégés : si le jeton est
+// absent/expiré (401), rejoue une connexion silencieuse avec le nom+mot de
+// passe encore en cache puis retente une fois. Si ça échoue aussi (mot de
+// passe changé, jamais connecté...), fait revenir sur l'écran de connexion
+// avec un message clair plutôt que de laisser chaque bouton échouer
+// silencieusement.
+async function apiFetch(url, opts = {}) {
+  const doFetch = () => fetch(url, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
+  let r = await doFetch();
+  if (r.status === 401 && PW) {
+    const ok = await login();
+    if (ok) return doFetch();
+    TOKEN = "";
+    localStorage.removeItem("vodio_token");
+    document.getElementById("app").classList.add("hidden");
+    document.getElementById("gate").classList.remove("hidden");
+    document.getElementById("gate-err").textContent = "Session expirée, reconnecte-toi";
+  }
+  return r;
+}
+
+async function logout() {
+  try { await fetch(`${BASE}/api/logout`, { method: "POST", headers: headers() }); } catch (e) { /* on efface quand même côté client */ }
+  USER = ""; PW = ""; TOKEN = "";
+  localStorage.removeItem("vodio_user");
+  localStorage.removeItem("vodio_pw");
+  localStorage.removeItem("vodio_token");
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("gate").classList.remove("hidden");
+  document.getElementById("user").value = "";
+  document.getElementById("pw").value = "";
+  document.getElementById("gate-err").textContent = "";
+}
+
 function toast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
@@ -439,7 +475,7 @@ async function unlock() {
   if (!(await login())) { document.getElementById("gate-err").textContent = "Nom ou mot de passe incorrect"; return; }
   localStorage.setItem("vodio_user", USER);
   localStorage.setItem("vodio_pw", PW);
-  const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist`);
   document.getElementById("gate").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   renderWatchlist((await r.json()).items);
@@ -452,7 +488,7 @@ async function unlock() {
 // en cache, reconnexion silencieuse via unlock().
 async function autoUnlock() {
   if (TOKEN) {
-    const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
+    const r = await apiFetch(`${BASE}/api/watchlist`);
     if (r.ok) {
       document.getElementById("gate").classList.add("hidden");
       document.getElementById("app").classList.remove("hidden");
@@ -504,7 +540,7 @@ function _advanceHero() {
 async function loadHero() {
   const hero = document.getElementById("hero");
   try {
-    const r = await fetch(`${BASE}/api/trending`, { headers: headers() });
+    const r = await apiFetch(`${BASE}/api/trending`);
     if (!r.ok) return;
     const trending = (await r.json()).items.map(i => ({ ...i, source: "trending" }));
     if (!trending.length) return;
@@ -523,7 +559,7 @@ async function search() {
   if (!q) return;
   const box = document.getElementById("results");
   box.innerHTML = '<p class="empty">Recherche…</p>';
-  const r = await fetch(`${BASE}/api/search?q=` + encodeURIComponent(q), { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/search?q=` + encodeURIComponent(q));
   if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de recherche</p>'; return; }
   const { results } = await r.json();
   if (!results.length) { box.innerHTML = '<p class="empty">Aucun résultat</p>'; return; }
@@ -549,8 +585,8 @@ async function search() {
 
 async function add(tmdbId, mediaType, btn) {
   btn.disabled = true; btn.textContent = "…";
-  const r = await fetch(`${BASE}/api/watchlist`, {
-    method: "POST", headers: headers(), body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType })
+  const r = await apiFetch(`${BASE}/api/watchlist`, {
+    method: "POST", body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType })
   });
   if (!r.ok) {
     const e = await r.json().catch(() => ({}));
@@ -588,7 +624,7 @@ let _changelogCache = null;
 async function loadVersionBadge() {
   try {
     if (!_changelogCache) {
-      const r = await fetch(`${BASE}/api/changelog`, { headers: headers() });
+      const r = await apiFetch(`${BASE}/api/changelog`);
       if (!r.ok) return;
       _changelogCache = await r.json();
     }
@@ -601,7 +637,7 @@ async function loadChangelog() {
   const box = document.getElementById("changelog-list");
   box.innerHTML = '<p class="empty">Chargement…</p>';
   if (!_changelogCache) {
-    const r = await fetch(`${BASE}/api/changelog`, { headers: headers() });
+    const r = await apiFetch(`${BASE}/api/changelog`);
     if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
     _changelogCache = await r.json();
   }
@@ -644,7 +680,7 @@ async function loadVod() {
   let items;
   if (_vodCache) { items = _vodCache; }
   else {
-    const r = await fetch(`${BASE}/api/vod`, { headers: headers() });
+    const r = await apiFetch(`${BASE}/api/vod`);
     if (!r.ok) { newBox.innerHTML = '<p class="empty">Erreur de chargement</p>'; digitalBox.innerHTML = ""; return; }
     items = (await r.json()).items;
   }
@@ -655,7 +691,7 @@ async function loadVod() {
     newBox.appendChild(_catalogCard(m, "movie", chip));
   });
 
-  const dr = await fetch(`${BASE}/api/digital-releases`, { headers: headers() });
+  const dr = await apiFetch(`${BASE}/api/digital-releases`);
   if (!dr.ok) { digitalBox.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
   const { items: digitalItems } = await dr.json();
   digitalBox.innerHTML = "";
@@ -672,7 +708,7 @@ function _formatCinemaDate(iso) {
 async function loadCinema() {
   const box = document.getElementById("cinema-grid");
   box.innerHTML = '<p class="empty">Chargement…</p>';
-  const r = await fetch(`${BASE}/api/cinema`, { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/cinema`);
   if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
   const { items } = await r.json();
   if (!items.length) { box.innerHTML = '<p class="empty">Rien cette semaine</p>'; return; }
@@ -684,7 +720,7 @@ async function loadCinema() {
 }
 
 async function reloadWatchlist() {
-  const r = await fetch(`${BASE}/api/watchlist`, { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist`);
   if (r.ok) renderWatchlist((await r.json()).items);
 }
 
@@ -698,7 +734,8 @@ function itemCard(m, watched) {
   const poster = m.poster ? `<img src="${m.poster}" alt="" loading="lazy">` : `<div class="noposter">${escapeHtml(m.name)}</div>`;
   const icon = m.type === "series" ? "📺" : "🎬";
   const isAvailable = (m.name || "").startsWith("✅");
-  const chip = watched ? `<span class="chip watched">👁 Vu</span>` : isAvailable ? `<span class="chip ok">✅⚡</span>` : `<span class="chip wait">⏳</span>`;
+  const etaLabel = !watched && !isAvailable && m.eta_days ? `⏳ ~${m.eta_days} j` : "⏳";
+  const chip = watched ? `<span class="chip watched">👁 Vu</span>` : isAvailable ? `<span class="chip ok">✅⚡</span>` : `<span class="chip wait">${etaLabel}</span>`;
   el.innerHTML = `
     <div class="poster-wrap${watched ? " watched-dim" : ""}" onclick='openDetail(${JSON.stringify(m.id)})'>${poster}${chip}
       <div class="card-overlay"><span>${icon} ${escapeHtml(m.releaseInfo || "")}</span></div>
@@ -764,7 +801,7 @@ async function _loadTrailer(tmdbId, mediaType) {
   const token = ++_trailerToken;
   if (!tmdbId) return;
   try {
-    const r = await fetch(`${BASE}/api/trailer/${tmdbId}?media_type=${mediaType}`, { headers: headers() });
+    const r = await apiFetch(`${BASE}/api/trailer/${tmdbId}?media_type=${mediaType}`);
     if (!r.ok) return;
     const { key } = await r.json();
     if (!key || token !== _trailerToken) return; // la modale a changé entre-temps
@@ -860,7 +897,7 @@ function renderModalBody(m) {
         <div class="hero-meta">
           <span class="pill">${icon} ${m.type === "series" ? "Série" : "Film"}</span>
           ${m.releaseInfo ? `<span class="pill">${escapeHtml(m.releaseInfo)}</span>` : ""}
-          <span class="pill">${watched ? "👁 Vu" : isAvailable ? "✅ Disponible" : "⏳ En cours"}</span>
+          <span class="pill">${watched ? "👁 Vu" : isAvailable ? "✅ Disponible" : (m.eta_days ? `⏳ dispo estimée dans ~${m.eta_days} j` : "⏳ En cours")}</span>
         </div>
       </div>
     </div>
@@ -917,7 +954,7 @@ async function toggleSources(imdbId, btn) {
   if (_sourcesOpenId === imdbId) { slot.innerHTML = ""; _sourcesOpenId = null; _sourcesCache = []; return; }
   _sourcesOpenId = imdbId;
   slot.innerHTML = '<p class="empty">Recherche des sources…</p>';
-  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/sources", { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/sources");
   if (!r.ok) { slot.innerHTML = '<p class="empty">Erreur de recherche</p>'; return; }
   const { sources } = await r.json();
   _sourcesCache = sources;
@@ -973,8 +1010,8 @@ async function resolveLumioSource(idx, playbackUrl, filename, imdbId, card) {
   const original = card.innerHTML;
   card.innerHTML += '<div class="fi-meta">⏳ Résolution…</div>';
   try {
-    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/resolve-lumio", {
-      method: "POST", headers: headers(),
+    const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/resolve-lumio", {
+      method: "POST",
       body: JSON.stringify({ playback_url: playbackUrl, filename }),
     });
     const data = await r.json();
@@ -1010,8 +1047,8 @@ async function startSourceDownload(idx, magnet, imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
   try {
-    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download-source", {
-      method: "POST", headers: headers(), body: JSON.stringify({ link: magnet }),
+    const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/download-source", {
+      method: "POST", body: JSON.stringify({ link: magnet }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || "Erreur AllDebrid");
@@ -1026,7 +1063,7 @@ async function startSourceDownload(idx, magnet, imdbId, btn) {
 async function recheckSourceStatus(idx, magnetId, imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
-  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/download-source/" + magnetId, { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/download-source/" + magnetId);
   const data = await r.json();
   if (!r.ok) {
     const resultEl = document.getElementById("src-ad-" + idx);
@@ -1043,7 +1080,7 @@ async function precache(imdbId, btn) {
   btn.textContent = "⏳ ...";
   const statusEl = document.getElementById("pc-" + imdbId);
   try {
-    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache", { method: "POST", headers: headers() });
+    const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/precache", { method: "POST" });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || "Erreur pré-cache");
     if (data.status === "cached") { statusEl.innerHTML = "✅ Déjà disponible"; btn.remove(); }
@@ -1065,7 +1102,7 @@ async function checkPrecache(imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
   const statusEl = document.getElementById("pc-" + imdbId);
-  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache", { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/precache");
   const data = await r.json();
   if (!r.ok) { statusEl.innerHTML = "❌ " + escapeHtml(data.detail || "Erreur"); btn.textContent = "🔄 Vérifier"; btn.disabled = false; return; }
   if (data.status === "ready") { statusEl.innerHTML = "✅ Prêt ! Lisible dans Stremio"; btn.remove(); }
@@ -1088,8 +1125,8 @@ async function precacheSeason(imdbId, btn) {
   btn.textContent = "⏳ ...";
   const statusEl = document.getElementById("pc-" + imdbId);
   try {
-    const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season", {
-      method: "POST", headers: headers(), body: JSON.stringify({ season })
+    const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season", {
+      method: "POST", body: JSON.stringify({ season })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || "Erreur pré-cache saison");
@@ -1147,7 +1184,7 @@ async function checkPrecacheSeason(imdbId, season, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
   const row = document.getElementById(`pc-${imdbId}-${season}`);
-  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season/" + season, { headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/precache-season/" + season);
   const data = await r.json();
   if (!r.ok) { if (row) row.innerHTML = "❌ " + escapeHtml(data.detail || "Erreur"); btn.textContent = "🔄 Vérifier S" + season; btn.disabled = false; return; }
   const { html, pending, stuckCount } = seasonStatusHtml(imdbId, season, data.episodes, data.total);
@@ -1162,8 +1199,8 @@ async function addMagnetEpisode(imdbId, season, ep, btn) {
   if (!magnet.startsWith("magnet:")) { toast("Lien magnet invalide"); return; }
   btn.disabled = true;
   btn.textContent = "…";
-  const r = await fetch(`${BASE}/api/watchlist/${imdbId}/precache-season/${season}/episode/${ep}/magnet`, {
-    method: "POST", headers: headers(), body: JSON.stringify({ magnet })
+  const r = await apiFetch(`${BASE}/api/watchlist/${imdbId}/precache-season/${season}/episode/${ep}/magnet`, {
+    method: "POST", body: JSON.stringify({ magnet })
   });
   const data = await r.json();
   if (!r.ok) { toast(data.detail || "Échec de l'ajout"); btn.disabled = false; btn.textContent = "Ajouter"; return; }
@@ -1174,16 +1211,17 @@ async function addMagnetEpisode(imdbId, season, ep, btn) {
 
 async function setWatched(imdbId, watched, btn) {
   btn.disabled = true;
-  const r = await fetch(`${BASE}/api/watchlist/` + imdbId + "/watched", {
-    method: "POST", headers: headers(), body: JSON.stringify({ watched })
+  const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/watched", {
+    method: "POST", body: JSON.stringify({ watched })
   });
   if (r.ok) { toast(watched ? "Marqué comme vu" : "Remis à voir"); reloadWatchlist(); }
   else btn.disabled = false;
 }
 
 async function remove(imdbId, btn) {
+  if (!confirm("Retirer ce titre de la liste ?")) return;
   btn.disabled = true;
-  const r = await fetch(`${BASE}/api/watchlist/` + imdbId, { method: "DELETE", headers: headers() });
+  const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId, { method: "DELETE" });
   if (r.ok) { toast("Retiré"); closeDetail(); reloadWatchlist(); } else { btn.disabled = false; }
 }
 

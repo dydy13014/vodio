@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>VODIO — Ma liste</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#08090d">
@@ -14,330 +14,333 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #08090d;
-    --surface: #11131a;
-    --surface-2: #181b24;
-    --text: #f7f7fb;
-    --muted: #a9adba;
-    --accent: #e6394a;
-    --accent-2: #ff5468;
-    --accent-ink: #ffffff;
-    --border: rgba(255,255,255,.09);
-    --ok: #3ecf70;
-    --wait: #e8a53a;
-    --danger: #ff5a5a;
-    --shadow: 0 20px 60px rgba(0,0,0,.45);
-    --radius: 18px;
-    --container: min(1180px, calc(100% - 32px));
+:root {
+  --bg: #08090d; --surface: #11131a; --surface-2: #181b24;
+  --text: #f7f7fb; --muted: #a9adba;
+  --accent: #e6394a; --accent-2: #ff5468; --accent-ink: #ffffff;
+  --border: rgba(255,255,255,.09);
+  --ok: #3ecf70; --wait: #e8a53a; --danger: #ff5a5a;
+  --shadow: 0 20px 60px rgba(0,0,0,.45);
+  --radius: 16px;
+  --container: min(1180px, calc(100% - 32px));
+  --glass: color-mix(in srgb, var(--bg) 74%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #f2f0ec; --surface: #ffffff; --surface-2: #ece9e2; --text: #17140f;
+    --muted: #6f6b62; --border: rgba(20,15,5,.12); --accent: #c22436; --accent-2: #d94357;
+    --ok: #1f8a4c; --wait: #9c6a17; --danger: #b6302f;
+    --shadow: 0 16px 40px -18px rgba(30,25,15,.3);
+    --glass: color-mix(in srgb, var(--bg) 82%, transparent);
   }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #f2f0ec; --surface: #ffffff; --surface-2: #ece9e2; --text: #17140f;
-      --muted: #6f6b62; --border: rgba(20,15,5,.12); --accent: #c22436; --accent-2: #d94357; --accent-ink: #ffffff;
-      --ok: #1f8a4c; --wait: #9c6a17; --danger: #b6302f; --shadow: 0 16px 40px -18px rgba(30,25,15,.3);
-    }
+}
+:root[data-theme="dark"] {
+  --bg: #08090d; --surface: #11131a; --surface-2: #181b24; --text: #f7f7fb; --muted: #a9adba;
+  --border: rgba(255,255,255,.09); --accent: #e6394a; --accent-2: #ff5468; --accent-ink: #ffffff;
+  --ok: #3ecf70; --wait: #e8a53a; --danger: #ff5a5a; --shadow: 0 20px 60px rgba(0,0,0,.45);
+  --glass: color-mix(in srgb, var(--bg) 74%, transparent);
+}
+:root[data-theme="light"] {
+  --bg: #f2f0ec; --surface: #ffffff; --surface-2: #ece9e2; --text: #17140f; --muted: #6f6b62;
+  --border: rgba(20,15,5,.12); --accent: #c22436; --accent-2: #d94357; --accent-ink: #ffffff;
+  --ok: #1f8a4c; --wait: #9c6a17; --danger: #b6302f; --shadow: 0 16px 40px -18px rgba(30,25,15,.3);
+  --glass: color-mix(in srgb, var(--bg) 82%, transparent);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; color-scheme: dark light; }
+body {
+  margin: 0; overflow-x: hidden; padding-top: 86px;
+  background: radial-gradient(circle at 80% -10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 28%), var(--bg);
+  color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5; font-variant-numeric: tabular-nums;
+}
+body.modal-open { overflow: hidden; }
+img { display: block; max-width: 100%; }
+button, input { font: inherit; color: inherit; }
+.container { width: var(--container); margin-inline: auto; }
+.section { padding: 44px 0; }
+.section-title { margin: 0 0 6px; font-size: clamp(1.5rem, 3vw, 2.1rem); letter-spacing: -.03em; font-weight: 800; }
+.section-title::after { content: ""; display: block; width: 44px; height: 3px; border-radius: 2px; background: var(--accent); margin-top: 8px; }
+.section-title .count { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.hidden { display: none !important; }
+/* ---------- Header flottant ---------- */
+.site-header {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1000;
+  width: min(1180px, calc(100% - 24px));
+  border: 1px solid var(--border); border-radius: 18px;
+  background: var(--glass); backdrop-filter: blur(18px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+  transition: background .3s ease, box-shadow .3s ease;
+}
+.site-header.scrolled { background: color-mix(in srgb, var(--bg) 90%, transparent); box-shadow: 0 16px 44px rgba(0,0,0,.4); }
+.nav-wrap { min-height: 58px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { display: inline-flex; align-items: center; gap: 9px; font-size: 1.15rem; font-weight: 900; letter-spacing: -.03em; }
+.brand-mark {
+  width: 34px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #8e0007);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  color: #fff; font-size: .95rem;
+}
+.version-badge {
+  font-size: .68rem; font-weight: 700; color: var(--muted);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem; margin-left: 2px;
+}
+.version-badge.clickable { cursor: pointer; transition: color .15s ease, background .15s ease; }
+.version-badge.clickable:hover { color: var(--text); background: color-mix(in srgb, var(--text) 13%, transparent); }
+.nav-links { display: flex; align-items: center; gap: 6px; }
+.tab {
+  background: transparent; border: 0; border-radius: 999px; padding: .5rem 1rem;
+  color: var(--muted); font-weight: 700; font-size: .88rem; cursor: pointer; transition: color .2s, background .2s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent-ink); background: var(--accent); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+.icon-btn {
+  width: 38px; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 5%, transparent); cursor: pointer; font-size: .95rem;
+}
+.icon-btn:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+/* ---------- Héro-carte ---------- */
+.hero {
+  position: relative; isolation: isolate; overflow: hidden;
+  width: var(--container); margin: 4px auto 8px;
+  border: 1px solid var(--border); border-radius: 24px;
+  min-height: clamp(380px, 52vh, 540px);
+  display: flex; align-items: flex-end; box-shadow: var(--shadow);
+}
+.hero[hidden] { display: none; }
+.hero-bg {
+  position: absolute; inset: 0; z-index: -2; background-position: center 22%; background-size: cover;
+  opacity: 1; transition: opacity .5s ease;
+}
+.hero::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--bg) 88%, transparent) 0%, color-mix(in srgb, var(--bg) 55%, transparent) 45%, transparent 80%),
+    linear-gradient(0deg, color-mix(in srgb, var(--bg) 92%, transparent) 0%, transparent 55%);
+}
+.hero-content { padding: 44px 30px 40px; max-width: 640px; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--border);
+  border-radius: 999px; background: color-mix(in srgb, #000 35%, transparent); font-size: .72rem;
+  font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-2);
+}
+.hero h1 { margin: 14px 0 10px; font-size: clamp(1.9rem, 5vw, 3.4rem); line-height: 1; letter-spacing: -.045em; text-wrap: balance; }
+.hero p { margin: 0; color: var(--muted); font-size: .92rem; max-width: 520px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 16px 0 20px; }
+.pill {
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 6%, transparent); font-size: .78rem; font-weight: 700;
+}
+.hero-dots { position: absolute; right: 18px; bottom: 16px; z-index: 2; display: flex; gap: 6px; }
+.hero-dot { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; background: rgba(255,255,255,.35); cursor: pointer; transition: width .25s ease, background .25s ease; }
+.hero-dot.active { width: 20px; background: var(--accent-2); }
+/* ---------- Boutons / champs ---------- */
+.row { display: flex; gap: .6rem; }
+input[type=text], input[type=password], input[type=number] {
+  padding: .7rem .9rem; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--text); font-size: 1rem;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row input[type=text] { flex: 1; }
+button.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px;
+  padding: 0 18px; border: none; border-radius: 12px; background: var(--accent); color: var(--accent-ink);
+  font-weight: 800; cursor: pointer; box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 30%, transparent);
+  transition: transform .15s ease, background .15s ease;
+}
+button.btn:hover { transform: translateY(-2px); background: var(--accent-2); }
+button.btn:active { transform: translateY(0); }
+button.ghost {
+  padding: .6rem 1rem; border: 1px solid var(--border); border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); font-weight: 700; cursor: pointer;
+}
+button.ghost:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
+button.small { padding: .4rem .7rem; font-size: .8rem; border-radius: 8px; }
+button.danger { background: transparent; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); color: var(--danger); border-radius: 8px; padding: .4rem .7rem; font-size: .8rem; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; transform: none !important; }
+button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+/* ---------- Grille d'affiches ---------- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 22px 18px; }
+.movie-card { position: relative; }
+.poster-wrap {
+  position: relative; overflow: hidden; border-radius: var(--radius); aspect-ratio: 2/3;
+  background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(0,0,0,.25);
+  cursor: pointer; transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+.poster-wrap:hover {
+  transform: translateY(-6px); z-index: 3;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 18px 44px rgba(0,0,0,.4), 0 0 24px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.poster-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s cubic-bezier(.2,.8,.2,1); }
+.poster-wrap:hover img { transform: scale(1.07); }
+.poster-wrap.watched-dim img { filter: grayscale(.5) brightness(.6); }
+.noposter { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .76rem; text-align: center; padding: .5rem; }
+.card-overlay {
+  position: absolute; inset: 0; z-index: 2; display: flex; align-items: flex-end; padding: 12px;
+  background: linear-gradient(transparent 40%, rgba(4,5,8,.94)); opacity: 0; transition: opacity .25s ease; pointer-events: none;
+}
+.poster-wrap:hover .card-overlay { opacity: 1; }
+.card-overlay span { color: #ecebf2; font-size: .74rem; font-weight: 600; }
+.card-overlay .card-desc { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; color: #d5d7de; margin-top: .3rem; }
+.chip {
+  position: absolute; top: .5rem; left: .5rem; z-index: 3;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: .22rem .6rem; border-radius: 999px; font-size: .7rem; font-weight: 800;
+  backdrop-filter: blur(8px); background: color-mix(in srgb, #000 60%, transparent); border: 1px solid var(--border);
+}
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.chip.wait { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 45%, transparent); }
+.chip.watched { color: var(--muted); }
+.date-chip { position: absolute; top: .5rem; left: .5rem; z-index: 3; padding: .22rem .6rem; border-radius: 999px; font-size: .7rem; font-weight: 800; backdrop-filter: blur(8px); background: color-mix(in srgb, #000 60%, transparent); border: 1px solid var(--border); color: var(--text); }
+.add-fab {
+  position: absolute; right: .5rem; bottom: .5rem; z-index: 3; width: 2rem; height: 2rem; padding: 0;
+  border: none; border-radius: 999px; background: var(--accent); color: #fff; font-size: 1.05rem;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: pointer;
+}
+.card-title { margin-top: .55rem; font-weight: 700; font-size: .88rem; line-height: 1.25; }
+.card-meta { color: var(--muted); font-size: .76rem; }
+.empty { color: var(--muted); text-align: center; padding: 2rem 1rem; font-size: .95rem; }
+.toast {
+  position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%) translateY(6px);
+  background: var(--surface-2); color: var(--text); padding: .65rem 1.1rem; border-radius: 12px;
+  border: 1px solid var(--border); box-shadow: var(--shadow); opacity: 0; transition: opacity .25s, transform .25s;
+  pointer-events: none; font-size: .88rem; max-width: 90vw; z-index: 3000;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* ---------- Gate (connexion) ---------- */
+#gate {
+  width: min(360px, calc(100% - 32px)); margin: 9vh auto 0; text-align: center;
+  padding: 28px 22px; border: 1px solid var(--border); border-radius: 22px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(14px);
+  box-shadow: var(--shadow), 0 0 60px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+#gate .brand { justify-content: center; font-size: 1.6rem; margin-bottom: 1.2rem; }
+#gate .row { margin-top: .8rem; }
+/* ---------- Modale ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 2000; display: none; place-items: center; padding: 20px;
+  background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
+}
+.modal.open { display: grid; }
+.modal-panel {
+  width: min(720px, 100%); max-height: min(88vh, 860px); overflow-y: auto;
+  border: 1px solid color-mix(in srgb, #fff 12%, transparent); border-radius: 26px; background: var(--surface);
+  box-shadow: 0 30px 100px rgba(0,0,0,.6); animation: modalIn .25s ease both;
+}
+@keyframes modalIn { from { opacity: 0; transform: translateY(18px) scale(.98); } }
+.modal-hero { position: relative; min-height: 240px; background-position: center; background-size: cover; }
+.modal-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--surface), transparent 65%), linear-gradient(90deg, color-mix(in srgb, var(--surface) 75%, transparent), transparent 60%); }
+.close-modal {
+  position: sticky; float: right; top: 12px; margin: 12px 12px 0 0; z-index: 10; width: 38px; aspect-ratio: 1;
+  border: 1px solid var(--border); border-radius: 50%; background: color-mix(in srgb, #000 55%, transparent); color: #fff;
+  cursor: pointer; font-size: 1rem;
+}
+.modal-content { padding: 0 26px 26px; margin-top: -54px; position: relative; z-index: 2; }
+.modal-top { display: grid; grid-template-columns: 118px 1fr; gap: 18px; align-items: end; margin-bottom: 18px; }
+.modal-poster { border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); aspect-ratio: 2/3; }
+.modal-poster img { width: 100%; height: 100%; object-fit: cover; }
+.modal-title h2 { margin: 0 0 8px; font-size: clamp(1.4rem, 4vw, 1.9rem); letter-spacing: -.03em; }
+.modal-desc { color: var(--muted); font-size: .9rem; line-height: 1.55; margin: 1rem 0 0; }
+.trailer-wrap { aspect-ratio: 16/9; overflow: hidden; border-radius: 14px; border: 1px solid var(--border); background: #000; margin-top: 1rem; }
+.trailer-wrap iframe { width: 100%; height: 100%; border: 0; }
+.trailer-label { font-size: .8rem; font-weight: 700; color: var(--muted); margin: 1rem 0 .4rem; text-transform: uppercase; letter-spacing: .06em; }
+.modal-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.detail-card { padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; font-size: .85rem; margin-top: .8rem; }
+.detail-card b { color: var(--text); }
+.pc-status { margin: .3rem 0; font-size: .8rem; color: var(--muted); }
+/* ---------- Sources (façon Ludio) ---------- */
+.found-list { margin-top: .6rem; display: flex; flex-direction: column; gap: .5rem; }
+.found-item { display: flex; flex-direction: column; gap: .4rem; padding: .6rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: .82rem; }
+.found-item.clickable { cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.found-item.clickable:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.found-item .fi-title { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.found-item .fi-meta { color: var(--muted); font-size: .78rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.found-item .fi-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+.found-item a.copy { color: var(--accent-2); cursor: pointer; font-weight: 700; flex-shrink: 0; padding: .25rem .55rem; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.found-item a.copy:hover { background: var(--accent); color: var(--accent-ink); }
+.ad-pending, .ad-error { font-size: .78rem; color: var(--muted); padding: .35rem .2rem; }
+.ad-error { color: var(--danger); }
+.cached-badge { color: var(--ok); font-weight: 700; }
+/* ---------- Mises à jour ---------- */
+.changelog-entry { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.changelog-entry:last-child { border-bottom: none; }
+.changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.changelog-version { font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em; }
+.changelog-date { color: var(--muted); font-size: .82rem; }
+.changelog-entry ul { margin: 0; padding-left: 1.1rem; color: var(--text); font-size: .9rem; line-height: 1.6; }
+.changelog-entry li { margin-bottom: 2px; }
+.season-precache { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
+.season-input { width: 3.6rem; }
+.ep-manual { margin-top: .4rem; display: flex; flex-direction: column; gap: .4rem; }
+.ep-row { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; font-size: .78rem; }
+.magnet-input { flex: 1; min-width: 150px; font-size: .78rem; padding: .4rem .55rem; }
+/* ---------- Reveal au scroll ---------- */
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.visible { opacity: 1; transform: none; }
+/* ---------- Mobile : tab bar en bas ---------- */
+@media (max-width: 760px) {
+  body { padding-top: 72px; padding-bottom: 74px; }
+  .site-header { top: 8px; width: calc(100% - 16px); }
+  .nav-links {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 1000;
+    display: flex; justify-content: space-around; align-items: stretch; gap: 4px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(18px);
+    border-top: 1px solid var(--border); border-radius: 0;
   }
-  :root[data-theme="dark"] {
-    --bg: #08090d; --surface: #11131a; --surface-2: #181b24; --text: #f7f7fb; --muted: #a9adba;
-    --border: rgba(255,255,255,.09); --accent: #e6394a; --accent-2: #ff5468; --accent-ink: #ffffff;
-    --ok: #3ecf70; --wait: #e8a53a; --danger: #ff5a5a; --shadow: 0 20px 60px rgba(0,0,0,.45);
-  }
-  :root[data-theme="light"] {
-    --bg: #f2f0ec; --surface: #ffffff; --surface-2: #ece9e2; --text: #17140f; --muted: #6f6b62;
-    --border: rgba(20,15,5,.12); --accent: #c22436; --accent-2: #d94357; --accent-ink: #ffffff;
-    --ok: #1f8a4c; --wait: #9c6a17; --danger: #b6302f; --shadow: 0 16px 40px -18px rgba(30,25,15,.3);
-  }
-
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; color-scheme: dark light; }
-  body {
-    margin: 0; overflow-x: hidden;
-    background: radial-gradient(circle at 80% -10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 28%), var(--bg);
-    color: var(--text); font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    line-height: 1.5; font-variant-numeric: tabular-nums;
-  }
-  body.modal-open { overflow: hidden; }
-  img { display: block; max-width: 100%; }
-  button, input { font: inherit; color: inherit; }
-
-  .container { width: var(--container); margin-inline: auto; }
-  .section { padding: 56px 0; }
-  .section-title { margin: 0 0 6px; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -.03em; font-weight: 800; }
-  .section-title .count { color: var(--muted); font-size: .85rem; font-weight: 600; }
-  .section-subtitle { margin: 0 0 28px; color: var(--muted); max-width: 640px; font-size: .92rem; }
-
-  /* ---------- Header ---------- */
-  .site-header {
-    position: sticky; top: 0; z-index: 1000; border-bottom: 1px solid transparent;
-    transition: background .3s ease, border-color .3s ease, backdrop-filter .3s ease;
-  }
-  .site-header.scrolled { background: color-mix(in srgb, var(--bg) 84%, transparent); border-color: var(--border); backdrop-filter: blur(18px); }
-  .nav-wrap { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-  .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 1.2rem; font-weight: 900; letter-spacing: -.03em; }
-  .brand-mark {
-    width: 34px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent), #8e0007); box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 35%, transparent);
-    color: #fff; font-size: .95rem;
-  }
-  .version-badge {
-    font-size: .68rem; font-weight: 700; color: var(--muted); background: color-mix(in srgb, var(--text) 7%, transparent);
-    border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem; margin-left: 2px; letter-spacing: .01em;
-  }
-  .version-badge.clickable { cursor: pointer; transition: color .15s ease, background .15s ease; }
-  .version-badge.clickable:hover { color: var(--text); background: color-mix(in srgb, var(--text) 13%, transparent); }
-  .nav-links { display: flex; align-items: center; gap: 6px; }
-  .tab {
-    background: transparent; border: 0; border-radius: 999px; padding: .5rem 1rem;
-    color: var(--muted); font-weight: 700; font-size: .88rem; cursor: pointer; transition: color .2s, background .2s;
-  }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent-ink); background: var(--accent); }
-  .menu-toggle {
-    display: none; width: 42px; aspect-ratio: 1; border: 1px solid var(--border); border-radius: 10px;
-    background: color-mix(in srgb, var(--text) 4%, transparent); cursor: pointer; font-size: 1.1rem;
-  }
-
-  /* ---------- Hero ---------- */
-  .hero {
-    min-height: 62vh; display: flex; align-items: flex-end; position: relative;
-    isolation: isolate; margin-bottom: 8px; overflow: hidden;
-  }
-  .hero-bg {
-    position: absolute; inset: 0; z-index: -2; background-position: center 22%; background-size: cover;
-    opacity: 1; transition: opacity .5s ease, background-image .1s;
-  }
-  .hero::after {
-    content: ""; position: absolute; inset: 0; z-index: -1;
-    background:
-      linear-gradient(90deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 78%, transparent) 42%, color-mix(in srgb, var(--bg) 18%, transparent) 78%),
-      linear-gradient(0deg, var(--bg) 0%, transparent 42%);
-  }
-  .hero-content { padding: 90px 0 44px; max-width: 640px; }
-  .eyebrow {
-    display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--border);
-    border-radius: 999px; background: color-mix(in srgb, #000 30%, transparent); font-size: .72rem;
-    font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-2);
-  }
-  .hero h1 { margin: 16px 0 10px; font-size: clamp(2.1rem, 5.5vw, 3.8rem); line-height: .98; letter-spacing: -.045em; text-wrap: balance; }
-  .hero p { margin: 0; color: var(--muted); font-size: .92rem; max-width: 520px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .hero-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 18px 0 22px; }
-  .pill {
-    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
-    background: color-mix(in srgb, var(--text) 6%, transparent); font-size: .78rem; font-weight: 700; color: var(--text);
-  }
-  .hero[hidden] { display: none; }
-
-  .row { display: flex; gap: .6rem; }
-  input[type=text], input[type=password], input[type=number] {
-    padding: .7rem .9rem; border: 1px solid var(--border); border-radius: 10px;
-    background: var(--surface); color: var(--text); font-size: 1rem;
-  }
-  input[type=text]:focus, input[type=password]:focus, input[type=number]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .row input[type=text] { flex: 1; }
-
-  button.btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px;
-    padding: 0 18px; border: none; border-radius: 11px; background: var(--accent); color: var(--accent-ink);
-    font-weight: 800; cursor: pointer; box-shadow: 0 12px 28px color-mix(in srgb, var(--accent) 30%, transparent);
-    transition: transform .15s ease, background .15s ease;
-  }
-  button.btn:hover { transform: translateY(-2px); background: var(--accent-2); }
-  button.btn:active { transform: translateY(0); }
-  button.ghost {
-    padding: .6rem 1rem; border: 1px solid var(--border); border-radius: 10px;
-    background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); font-weight: 700; cursor: pointer;
-  }
-  button.ghost:hover { background: color-mix(in srgb, var(--text) 9%, transparent); }
-  button.small { padding: .4rem .7rem; font-size: .8rem; border-radius: 8px; }
-  button.danger { background: transparent; border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); color: var(--danger); border-radius: 8px; padding: .4rem .7rem; font-size: .8rem; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; transform: none !important; }
-  button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-
-  /* ---------- Grille d'affiches ---------- */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 20px 18px; }
-
-  .movie-card { position: relative; }
-  .poster-wrap {
-    position: relative; overflow: hidden; border-radius: var(--radius); aspect-ratio: 2/3;
-    background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 28px rgba(0,0,0,.25);
-    cursor: pointer; transition: transform .3s ease, border-color .3s ease, box-shadow .3s ease;
-  }
-  .poster-wrap:hover { transform: translateY(-6px); border-color: color-mix(in srgb, #fff 18%, transparent); box-shadow: var(--shadow); z-index: 3; }
-  .poster-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s cubic-bezier(.2,.8,.2,1); }
-  .poster-wrap:hover img { transform: scale(1.07); }
-  .noposter { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .76rem; text-align: center; padding: .5rem; }
-
-  .card-overlay {
-    position: absolute; inset: 0; z-index: 2; display: flex; align-items: flex-end; padding: 12px;
-    background: linear-gradient(transparent 40%, rgba(4,5,8,.94)); opacity: 0; transition: opacity .25s ease; pointer-events: none;
-  }
-  .poster-wrap:hover .card-overlay { opacity: 1; }
-  .card-overlay span { color: #ecebf2; font-size: .74rem; font-weight: 600; }
-  .card-overlay .card-desc { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; color: #d5d7de; margin-top: .3rem; }
-
-  .chip {
-    position: absolute; top: .5rem; left: .5rem; z-index: 3; padding: .2rem .55rem; border-radius: 999px;
-    font-size: .7rem; font-weight: 800; backdrop-filter: blur(6px);
-    background: color-mix(in srgb, #000 55%, transparent); border: 1px solid var(--border);
-  }
-  .chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
-  .chip.wait { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 45%, transparent); }
-  .chip.watched { color: var(--muted); }
-  .date-chip { position: absolute; top: .5rem; left: .5rem; z-index: 3; padding: .2rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 800; backdrop-filter: blur(6px); background: color-mix(in srgb, #000 55%, transparent); border: 1px solid var(--border); color: var(--text); }
-
-  .add-fab {
-    position: absolute; right: .5rem; bottom: .5rem; z-index: 3; width: 2rem; height: 2rem; padding: 0;
-    border: none; border-radius: 999px; background: var(--accent); color: #fff; font-size: 1.05rem;
-    display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 20px rgba(0,0,0,.4); cursor: pointer;
-  }
-  .poster-wrap.watched-dim img { filter: grayscale(.5) brightness(.6); }
-
-  .card-title { margin-top: .5rem; font-weight: 700; font-size: .88rem; line-height: 1.25; }
-  .card-meta { color: var(--muted); font-size: .76rem; }
-
-  .empty { color: var(--muted); text-align: center; padding: 2rem 1rem; font-size: .95rem; }
-  .hidden { display: none !important; }
-
-  .toast {
-    position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%) translateY(6px);
-    background: var(--surface-2); color: var(--text); padding: .65rem 1.1rem; border-radius: 10px;
-    border: 1px solid var(--border); box-shadow: var(--shadow); opacity: 0; transition: opacity .25s, transform .25s;
-    pointer-events: none; font-size: .88rem; max-width: 90vw; z-index: 3000;
-  }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  /* ---------- Gate ---------- */
-  #gate { max-width: 340px; margin: 5rem auto 0; text-align: center; padding: 0 1rem; }
-  #gate .brand { justify-content: center; font-size: 1.6rem; margin-bottom: 1.2rem; }
-  #gate .row { margin-top: .8rem; }
-
-  /* ---------- Modal de détail ---------- */
-  .modal {
-    position: fixed; inset: 0; z-index: 2000; display: none; place-items: center; padding: 20px;
-    background: rgba(0,0,0,.78); backdrop-filter: blur(10px);
-  }
-  .modal.open { display: grid; }
-  .modal-panel {
-    width: min(720px, 100%); max-height: min(88vh, 860px); overflow-y: auto;
-    border: 1px solid color-mix(in srgb, #fff 12%, transparent); border-radius: 22px; background: var(--surface);
-    box-shadow: 0 30px 100px rgba(0,0,0,.6); animation: modalIn .25s ease both;
-  }
-  @keyframes modalIn { from { opacity: 0; transform: translateY(18px) scale(.98); } }
-  .modal-hero { position: relative; min-height: 240px; background-position: center; background-size: cover; }
-  .modal-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, var(--surface), transparent 65%), linear-gradient(90deg, color-mix(in srgb, var(--surface) 75%, transparent), transparent 60%); }
-  .close-modal {
-    position: sticky; float: right; top: 12px; margin: 12px 12px 0 0; z-index: 10; width: 38px; aspect-ratio: 1;
-    border: 1px solid var(--border); border-radius: 50%; background: color-mix(in srgb, #000 55%, transparent); color: #fff;
-    cursor: pointer; font-size: 1rem;
-  }
-  .modal-content { padding: 0 26px 26px; margin-top: -54px; position: relative; z-index: 2; }
-  .modal-top { display: grid; grid-template-columns: 118px 1fr; gap: 18px; align-items: end; margin-bottom: 18px; }
-  .modal-poster { border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); aspect-ratio: 2/3; }
-  .modal-poster img { width: 100%; height: 100%; object-fit: cover; }
-  .modal-title h2 { margin: 0 0 8px; font-size: clamp(1.4rem, 4vw, 1.9rem); letter-spacing: -.03em; }
-  .modal-desc { color: var(--muted); font-size: .9rem; line-height: 1.55; margin: 1rem 0 0; }
-  .trailer-wrap { aspect-ratio: 16/9; overflow: hidden; border-radius: 14px; border: 1px solid var(--border); background: #000; margin-top: 1rem; }
-  .trailer-wrap iframe { width: 100%; height: 100%; border: 0; }
-  .trailer-label { font-size: .8rem; font-weight: 700; color: var(--muted); margin: 1rem 0 .4rem; text-transform: uppercase; letter-spacing: .06em; }
-  .modal-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
-  .detail-card { padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; font-size: .85rem; margin-top: .8rem; }
-  .detail-card b { color: var(--text); }
-
-  /* ---------- Liste des sources (façon Ludio) ---------- */
-  .found-list { margin-top: .6rem; display: flex; flex-direction: column; gap: .5rem; }
-  .found-item { display: flex; flex-direction: column; gap: .4rem; padding: .6rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; font-size: .82rem; }
-  .found-item.clickable { cursor: pointer; transition: border-color .15s ease, background .15s ease; }
-  .found-item.clickable:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
-  .found-item .fi-title { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
-  .found-item .fi-meta { color: var(--muted); font-size: .78rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-  .found-item .fi-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
-  .found-item a.copy { color: var(--accent-2); cursor: pointer; font-weight: 700; flex-shrink: 0; padding: .25rem .55rem; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
-  .found-item a.copy:hover { background: var(--accent); color: var(--accent-ink); }
-  .ad-pending, .ad-error { font-size: .78rem; color: var(--muted); padding: .35rem .2rem; }
-  .ad-error { color: var(--danger); }
-  .cached-badge { color: var(--ok); font-weight: 700; }
-  /* ---------- Mises à jour ---------- */
-  .changelog-entry { padding: 16px 0; border-bottom: 1px solid var(--border); }
-  .changelog-entry:last-child { border-bottom: none; }
-  .changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
-  .changelog-version { font-weight: 800; font-size: 1.05rem; letter-spacing: -.02em; }
-  .changelog-date { color: var(--muted); font-size: .82rem; }
-  .changelog-entry ul { margin: 0; padding-left: 1.1rem; color: var(--text); font-size: .9rem; line-height: 1.6; }
-  .changelog-entry li { margin-bottom: 2px; }
-
-  .season-precache { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
-  .season-input { width: 3.6rem; }
-  .ep-manual { margin-top: .4rem; display: flex; flex-direction: column; gap: .4rem; }
-  .ep-row { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; font-size: .78rem; }
-  .magnet-input { flex: 1; min-width: 150px; font-size: .78rem; padding: .4rem .55rem; }
-
-  /* ---------- Animations au scroll ---------- */
-  .reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
-  .reveal.visible { opacity: 1; transform: none; }
-
-  @media (max-width: 760px) {
-    .menu-toggle { display: grid; place-items: center; }
-    .nav-links {
-      position: absolute; top: 60px; left: 12px; right: 12px; display: none; flex-direction: column;
-      gap: 2px; padding: 10px; border-radius: 14px; background: color-mix(in srgb, var(--bg) 96%, transparent);
-      border: 1px solid var(--border); backdrop-filter: blur(18px);
-    }
-    .nav-links.open { display: flex; }
-    .tab { text-align: left; }
-    .hero { min-height: 52vh; }
-    .hero-content { padding: 70px 0 32px; }
-    .modal-top { grid-template-columns: 92px 1fr; }
-  }
-  @media (max-width: 500px) {
-    :root { --container: min(100% - 22px, 1180px); }
-    .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .toast, .poster-wrap, .poster-wrap img, .card-overlay, button, .reveal { transition: none; }
-    .reveal { opacity: 1; transform: none; }
-  }
+  .tab { flex: 1; text-align: center; }
+  .hero { min-height: 340px; border-radius: 18px; }
+  .hero-content { padding: 30px 20px 34px; }
+  .modal-top { grid-template-columns: 92px 1fr; }
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 500px) {
+  :root { --container: min(100% - 22px, 1180px); }
+  .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .toast, .poster-wrap, .poster-wrap img, .card-overlay, button, .reveal, .hero-dot, .hero-bg { transition: none; }
+  .reveal { opacity: 1; transform: none; }
+}
 </style>
 </head>
 <body>
 <div id="gate">
   <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span><span class="version-badge" id="version-badge-gate"></span></div>
-  <div class="row">
-    <input type="text" id="user" placeholder="Nom" autocomplete="username" style="flex:1">
-  </div>
+  <div class="row"><input type="text" id="user" placeholder="Nom" autocomplete="username" style="flex:1"></div>
   <div class="row">
     <input type="password" id="pw" placeholder="Mot de passe" autocomplete="current-password" style="flex:1">
     <button class="btn" onclick="unlock()">Entrer</button>
   </div>
   <p class="empty" id="gate-err"></p>
 </div>
-
 <div id="app" class="hidden">
   <header class="site-header" id="header">
-    <div class="container nav-wrap">
+    <div class="nav-wrap">
       <div class="brand"><span class="brand-mark">▶</span><span>VODIO</span><span class="version-badge clickable" id="version-badge" onclick="switchTab('changelog')" title="Voir les mises à jour"></span></div>
-      <button class="menu-toggle" id="menuToggle" aria-label="Ouvrir le menu" aria-expanded="false">☰</button>
       <nav class="nav-links" id="navLinks">
         <button class="tab active" data-tab="mine" onclick="switchTab('mine')">Ma liste</button>
         <button class="tab" data-tab="vod" onclick="switchTab('vod')">VOD</button>
         <button class="tab" data-tab="cinema" onclick="switchTab('cinema')">Cinéma</button>
-        <button class="tab" onclick="logout()">Déconnexion</button>
+        <button class="icon-btn" id="themeToggle" aria-label="Changer de thème" title="Changer de thème">🌙</button>
+        <button class="icon-btn" onclick="logout()" aria-label="Déconnexion" title="Déconnexion">⏻</button>
       </nav>
     </div>
   </header>
-
   <section class="hero hidden" id="hero">
     <div class="hero-bg" id="hero-bg"></div>
-    <div class="container hero-content reveal">
+    <div class="hero-content reveal">
       <span class="eyebrow">🔥 Tendances TMDB</span>
       <h1 id="hero-title"></h1>
       <p id="hero-sub"></p>
       <div class="hero-meta" id="hero-meta"></div>
       <button class="btn" id="hero-add">+ Ajouter à ma liste</button>
     </div>
+    <div class="hero-dots" id="hero-dots"></div>
   </section>
-
   <main class="container">
     <div id="tab-mine">
       <div class="row" style="margin-top:1.6rem">
@@ -345,39 +348,32 @@
         <button class="btn" onclick="search()">Chercher</button>
       </div>
       <div id="results" class="grid" style="margin-top:1rem"></div>
-
       <div class="section">
         <h2 class="section-title reveal">Ma liste <span class="count">(<span id="count">0</span>)</span></h2>
         <div id="watchlist" class="grid"></div>
       </div>
-
       <div id="watched-section" class="hidden section" style="padding-top:0">
         <h2 class="section-title reveal">Déjà vus <span class="count">(<span id="watched-count">0</span>)</span></h2>
         <div id="watched" class="grid"></div>
       </div>
     </div>
-
     <div id="tab-vod" class="hidden section">
       <h2 class="section-title reveal">Nouveautés VOD</h2>
       <div id="vod-new" class="grid"></div>
       <h2 class="section-title reveal" style="margin-top:2rem">Sorties digitales récentes</h2>
       <div id="vod-digital" class="grid"></div>
     </div>
-
     <div id="tab-cinema" class="hidden section">
       <h2 class="section-title reveal">Sorties de la semaine</h2>
       <div id="cinema-grid" class="grid"></div>
     </div>
-
     <div id="tab-changelog" class="hidden section">
       <h2 class="section-title reveal">Mises à jour</h2>
       <div id="changelog-list" style="max-width:640px"></div>
     </div>
   </main>
 </div>
-
 <div class="toast" id="toast"></div>
-
 <div class="modal" id="detailModal" role="dialog" aria-modal="true">
   <div class="modal-panel">
     <button class="close-modal" id="closeModal" aria-label="Fermer">✕</button>
@@ -385,15 +381,31 @@
     <div class="modal-content" id="modalContent"></div>
   </div>
 </div>
-
 <script>
 const BASE = location.pathname.replace(/\/+$/, "");
 let USER = localStorage.getItem("vodio_user") || "";
 let PW = localStorage.getItem("vodio_pw") || "";
 let TOKEN = localStorage.getItem("vodio_token") || "";
-
 function headers() { return { "Authorization": "Bearer " + TOKEN, "Content-Type": "application/json" }; }
-
+// Wrapper fetch : sur 401 (jeton expiré, ex. redémarrage serveur), rejoue un
+// login silencieux avec les identifiants en cache puis retente la requête une
+// fois — évite les échecs muets de tous les boutons après 30 j ou un restart.
+// Important : la retentative reconstruit les headers() à ce moment-là (pas
+// ceux passés par l'appelant) — sinon elle repart avec le jeton périmé qui a
+// justement causé le 401, et échoue à nouveau (bug corrigé à l'intégration).
+let _relogging = false;
+async function apiFetch(url, opts = {}) {
+  const doFetch = () => fetch(url, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
+  let r = await doFetch();
+  if (r.status === 401 && !_relogging && PW) {
+    _relogging = true;
+    try {
+      if (await login()) { r = await doFetch(); }
+      else { toast("Session expirée — reconnecte-toi"); }
+    } finally { _relogging = false; }
+  }
+  return r;
+}
 // Échange nom+mot de passe contre un jeton de session (une seule requête
 // avec le mot de passe en clair, au lieu d'un à chaque appel API).
 async function login() {
@@ -406,28 +418,6 @@ async function login() {
   localStorage.setItem("vodio_token", TOKEN);
   return true;
 }
-
-// Enveloppe fetch pour les appels API protégés : si le jeton est
-// absent/expiré (401), rejoue une connexion silencieuse avec le nom+mot de
-// passe encore en cache puis retente une fois. Si ça échoue aussi (mot de
-// passe changé, jamais connecté...), fait revenir sur l'écran de connexion
-// avec un message clair plutôt que de laisser chaque bouton échouer
-// silencieusement.
-async function apiFetch(url, opts = {}) {
-  const doFetch = () => fetch(url, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
-  let r = await doFetch();
-  if (r.status === 401 && PW) {
-    const ok = await login();
-    if (ok) return doFetch();
-    TOKEN = "";
-    localStorage.removeItem("vodio_token");
-    document.getElementById("app").classList.add("hidden");
-    document.getElementById("gate").classList.remove("hidden");
-    document.getElementById("gate-err").textContent = "Session expirée, reconnecte-toi";
-  }
-  return r;
-}
-
 async function logout() {
   try { await fetch(`${BASE}/api/logout`, { method: "POST", headers: headers() }); } catch (e) { /* on efface quand même côté client */ }
   USER = ""; PW = ""; TOKEN = "";
@@ -440,13 +430,24 @@ async function logout() {
   document.getElementById("pw").value = "";
   document.getElementById("gate-err").textContent = "";
 }
-
 function toast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 2200);
 }
-
+// ---------- Thème clair/sombre persistant ----------
+const _themeBtn = document.getElementById("themeToggle");
+function _applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  if (_themeBtn) _themeBtn.textContent = t === "dark" ? "🌙" : "☀️";
+}
+let _savedTheme = localStorage.getItem("vodio_theme");
+_applyTheme(_savedTheme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+if (_themeBtn) _themeBtn.addEventListener("click", () => {
+  _savedTheme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("vodio_theme", _savedTheme);
+  _applyTheme(_savedTheme);
+});
 // ---------- Reveal au scroll ----------
 let _observer;
 function observeReveals() {
@@ -457,18 +458,16 @@ function observeReveals() {
   document.querySelectorAll(".reveal:not(.visible)").forEach(el => _observer.observe(el));
 }
 document.addEventListener("DOMContentLoaded", observeReveals);
-
-// ---------- Header qui se floute au scroll + menu mobile ----------
+// ---------- Header qui se floute au scroll (hamburger retiré : tab bar mobile en bas) ----------
 const _header = document.getElementById("header");
 window.addEventListener("scroll", () => { if (_header) _header.classList.toggle("scrolled", window.scrollY > 12); });
-const _menuToggle = document.getElementById("menuToggle");
+const _menuToggle = document.getElementById("menuToggle"); // absent dans le nouveau markup
 const _navLinks = document.getElementById("navLinks");
-_menuToggle.addEventListener("click", () => {
+if (_menuToggle) _menuToggle.addEventListener("click", () => {
   const open = _navLinks.classList.toggle("open");
   _menuToggle.setAttribute("aria-expanded", open);
   _menuToggle.textContent = open ? "✕" : "☰";
 });
-
 async function unlock() {
   USER = document.getElementById("user").value.trim();
   PW = document.getElementById("pw").value;
@@ -482,7 +481,6 @@ async function unlock() {
   loadHero();
   loadVersionBadge();
 }
-
 // Au chargement : essaie d'abord le jeton en cache (pas de mot de passe
 // renvoyé) ; s'il est absent/expiré mais que le nom+mot de passe sont encore
 // en cache, reconnexion silencieuse via unlock().
@@ -504,16 +502,22 @@ async function autoUnlock() {
     unlock();
   }
 }
-
-// ---------- Bandeau héros : un titre au hasard parmi les nouveautés VOD disponibles ----------
-// ---------- Bandeau héros : carrousel des tendances TMDB, défilement auto ----------
+// ---------- Bandeau héros : carrousel des tendances TMDB, défilement auto + dots cliquables ----------
 let _heroItems = [];
 let _heroIndex = 0;
 let _heroTimer = null;
 const HERO_INTERVAL_MS = 7000;
-
+function _restartHeroTimer() {
+  if (_heroTimer) clearInterval(_heroTimer);
+  _heroTimer = setInterval(_advanceHero, HERO_INTERVAL_MS);
+}
+function goHero(i) {
+  if (!_heroItems.length) return;
+  _heroIndex = ((i % _heroItems.length) + _heroItems.length) % _heroItems.length;
+  _renderHeroSlide(_heroItems[_heroIndex]);
+  _restartHeroTimer();
+}
 function _renderHeroSlide(pick) {
-  const hero = document.getElementById("hero");
   const heroBg = document.getElementById("hero-bg");
   const eyebrowLabel = "🔥 Tendance TMDB";
   heroBg.style.opacity = 0;
@@ -529,14 +533,13 @@ function _renderHeroSlide(pick) {
     addBtn.onclick = () => openCatalogDetail({ name: pick.name, poster: pick.poster, overview: pick.overview, releaseInfo: pick.year, tmdb_id: pick.tmdb_id }, "movie");
     heroBg.style.opacity = 1;
   }, 220);
+  document.querySelectorAll(".hero-dot").forEach((d, i) => d.classList.toggle("active", i === _heroIndex));
 }
-
 function _advanceHero() {
   if (!_heroItems.length) return;
   _heroIndex = (_heroIndex + 1) % _heroItems.length;
   _renderHeroSlide(_heroItems[_heroIndex]);
 }
-
 async function loadHero() {
   const hero = document.getElementById("hero");
   try {
@@ -546,14 +549,17 @@ async function loadHero() {
     if (!trending.length) return;
     _heroItems = trending;
     _heroIndex = 0;
+    const dots = document.getElementById("hero-dots");
+    if (dots) {
+      dots.innerHTML = _heroItems.map((_, i) => `<button class="hero-dot" data-i="${i}" aria-label="Tendance ${i + 1}"></button>`).join("");
+      dots.querySelectorAll(".hero-dot").forEach(b => b.addEventListener("click", () => goHero(+b.dataset.i)));
+    }
     _renderHeroSlide(_heroItems[0]);
     hero.classList.remove("hidden");
     observeReveals();
-    if (_heroTimer) clearInterval(_heroTimer);
-    _heroTimer = setInterval(_advanceHero, HERO_INTERVAL_MS);
+    _restartHeroTimer();
   } catch (e) { /* pas de héros si la source échoue, le reste de la page marche quand même */ }
 }
-
 async function search() {
   const q = document.getElementById("q").value.trim();
   if (!q) return;
@@ -582,7 +588,6 @@ async function search() {
     box.appendChild(el);
   }
 }
-
 async function add(tmdbId, mediaType, btn) {
   btn.disabled = true; btn.textContent = "…";
   const r = await apiFetch(`${BASE}/api/watchlist`, {
@@ -598,12 +603,10 @@ async function add(tmdbId, mediaType, btn) {
   reloadWatchlist();
   if (added) setTimeout(reloadWatchlist, 35000);
 }
-
 // ---------- Onglets VOD / Cinéma (navigation + chargement paresseux) ----------
 const _tabLoaded = { vod: false, cinema: false, changelog: false };
 let _vodCache = null;
 let _watchlistCache = [];
-
 function switchTab(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   document.getElementById("tab-mine").classList.toggle("hidden", name !== "mine");
@@ -611,20 +614,17 @@ function switchTab(name) {
   document.getElementById("tab-cinema").classList.toggle("hidden", name !== "cinema");
   document.getElementById("tab-changelog").classList.toggle("hidden", name !== "changelog");
   document.getElementById("hero").classList.toggle("hidden", name !== "mine" || !document.getElementById("hero-title").textContent);
-  _navLinks.classList.remove("open");
-  _menuToggle.setAttribute("aria-expanded", "false");
-  _menuToggle.textContent = "☰";
+  if (_navLinks) _navLinks.classList.remove("open");
+  if (_menuToggle) { _menuToggle.setAttribute("aria-expanded", "false"); _menuToggle.textContent = "☰"; }
   if (name === "vod" && !_tabLoaded.vod) { _tabLoaded.vod = true; loadVod(); }
   if (name === "cinema" && !_tabLoaded.cinema) { _tabLoaded.cinema = true; loadCinema(); }
   if (name === "changelog" && !_tabLoaded.changelog) { _tabLoaded.changelog = true; loadChangelog(); }
 }
-
 let _changelogCache = null;
-
 async function loadVersionBadge() {
   try {
     if (!_changelogCache) {
-      const r = await apiFetch(`${BASE}/api/changelog`);
+      const r = await fetch(`${BASE}/api/changelog`); // endpoint public, pas de jeton requis
       if (!r.ok) return;
       _changelogCache = await r.json();
     }
@@ -632,12 +632,11 @@ async function loadVersionBadge() {
     document.getElementById("version-badge-gate").textContent = "v" + _changelogCache.version;
   } catch (e) { /* badge optionnel, la page reste utilisable sans */ }
 }
-
 async function loadChangelog() {
   const box = document.getElementById("changelog-list");
   box.innerHTML = '<p class="empty">Chargement…</p>';
   if (!_changelogCache) {
-    const r = await apiFetch(`${BASE}/api/changelog`);
+    const r = await fetch(`${BASE}/api/changelog`);
     if (!r.ok) { box.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
     _changelogCache = await r.json();
   }
@@ -656,7 +655,6 @@ async function loadChangelog() {
     box.appendChild(el);
   });
 }
-
 function _catalogCard(m, mediaType, extraChipHtml) {
   const el = document.createElement("div");
   el.className = "movie-card";
@@ -672,7 +670,6 @@ function _catalogCard(m, mediaType, extraChipHtml) {
   el.querySelector(".add-fab").addEventListener("click", function (e) { e.stopPropagation(); add(m.tmdb_id, mediaType, this); });
   return el;
 }
-
 async function loadVod() {
   const newBox = document.getElementById("vod-new");
   const digitalBox = document.getElementById("vod-digital");
@@ -687,10 +684,9 @@ async function loadVod() {
   newBox.innerHTML = "";
   if (!items.length) newBox.innerHTML = '<p class="empty">Rien pour le moment</p>';
   else items.forEach(m => {
-    const chip = (m.name || "").startsWith("✅") ? '<span class="chip ok">✅⚡</span>' : '<span class="chip wait">⏳</span>';
+    const chip = (m.name || "").startsWith("✅") ? '<span class="chip ok">✓ Dispo</span>' : '<span class="chip wait">⏳</span>';
     newBox.appendChild(_catalogCard(m, "movie", chip));
   });
-
   const dr = await apiFetch(`${BASE}/api/digital-releases`);
   if (!dr.ok) { digitalBox.innerHTML = '<p class="empty">Erreur de chargement</p>'; return; }
   const { items: digitalItems } = await dr.json();
@@ -698,13 +694,11 @@ async function loadVod() {
   if (!digitalItems.length) digitalBox.innerHTML = '<p class="empty">Rien pour le moment</p>';
   else digitalItems.forEach(m => digitalBox.appendChild(_catalogCard({ ...m, releaseInfo: m.year }, "movie", "")));
 }
-
 function _formatCinemaDate(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
-
 async function loadCinema() {
   const box = document.getElementById("cinema-grid");
   box.innerHTML = '<p class="empty">Chargement…</p>';
@@ -718,24 +712,23 @@ async function loadCinema() {
     box.appendChild(_catalogCard(m, "movie", dateLabel ? `<span class="date-chip">${dateLabel}</span>` : ""));
   });
 }
-
 async function reloadWatchlist() {
   const r = await apiFetch(`${BASE}/api/watchlist`);
   if (r.ok) renderWatchlist((await r.json()).items);
 }
-
 // Retire le préfixe de badge (✅/⚡/⏳) pour l'affichage du titre — le badge
 // vit dans la puce (chip) au-dessus de l'affiche, pas dans le nom.
 function _stripBadgeJs(name) { return (name || "").replace(/^[✅⏳⚡]+\s*/, ""); }
-
 function itemCard(m, watched) {
   const el = document.createElement("div");
   el.className = "movie-card";
   const poster = m.poster ? `<img src="${m.poster}" alt="" loading="lazy">` : `<div class="noposter">${escapeHtml(m.name)}</div>`;
   const icon = m.type === "series" ? "📺" : "🎬";
   const isAvailable = (m.name || "").startsWith("✅");
-  const etaLabel = !watched && !isAvailable && m.eta_days ? `⏳ ~${m.eta_days} j` : "⏳";
-  const chip = watched ? `<span class="chip watched">👁 Vu</span>` : isAvailable ? `<span class="chip ok">✅⚡</span>` : `<span class="chip wait">${etaLabel}</span>`;
+  const etaLabel = !watched && !isAvailable && m.eta_days ? `⏳ ~${m.eta_days} j` : "⏳ En cours";
+  const chip = watched
+    ? `<span class="chip watched">👁 Vu</span>`
+    : isAvailable ? `<span class="chip ok">✓ Dispo</span>` : `<span class="chip wait">${etaLabel}</span>`;
   el.innerHTML = `
     <div class="poster-wrap${watched ? " watched-dim" : ""}" onclick='openDetail(${JSON.stringify(m.id)})'>${poster}${chip}
       <div class="card-overlay"><span>${icon} ${escapeHtml(m.releaseInfo || "")}</span></div>
@@ -744,7 +737,6 @@ function itemCard(m, watched) {
     <div class="card-meta">${icon} ${m.releaseInfo || ""}</div>`;
   return el;
 }
-
 function renderWatchlist(items) {
   _watchlistCache = items;
   const toWatch = items.filter(m => !m.watched);
@@ -754,7 +746,6 @@ function renderWatchlist(items) {
   box.innerHTML = "";
   if (!toWatch.length) box.innerHTML = '<p class="empty">Ta liste est vide</p>';
   else toWatch.forEach(m => box.appendChild(itemCard(m, false)));
-
   const section = document.getElementById("watched-section");
   const wbox = document.getElementById("watched");
   document.getElementById("watched-count").textContent = watched.length;
@@ -772,13 +763,11 @@ function renderWatchlist(items) {
     if (fresh) renderModalBody(fresh); else closeDetail();
   }
 }
-
 // ---------- Modale de détail : toutes les actions réelles d'un item ----------
 let _openDetailId = null;
 const modal = document.getElementById("detailModal");
 const modalHero = document.getElementById("modalHero");
 const modalContent = document.getElementById("modalContent");
-
 function openDetail(id) {
   const m = _watchlistCache.find(item => item.id === id);
   if (!m) return;
@@ -787,7 +776,6 @@ function openDetail(id) {
   modal.classList.add("open");
   document.body.classList.add("modal-open");
 }
-
 // Même modale, pour un titre pas (encore) dans la watchlist (VOD/Cinéma/
 // recherche) : pas d'actions de suivi (précache/téléchargement/vu), juste
 // l'info + le bouton d'ajout — ces actions n'ont de sens qu'une fois le
@@ -811,7 +799,6 @@ async function _loadTrailer(tmdbId, mediaType) {
       <div class="trailer-wrap"><iframe src="https://www.youtube.com/embed/${key}" title="Bande-annonce" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
   } catch (e) { /* pas de bande-annonce trouvée : la fiche reste utilisable sans */ }
 }
-
 function openCatalogDetail(m, mediaType) {
   _openDetailId = null;
   modalHero.style.backgroundImage = m.poster ? `url('${m.poster}')` : "none";
@@ -836,17 +823,16 @@ function openCatalogDetail(m, mediaType) {
   document.body.classList.add("modal-open");
   _loadTrailer(m.tmdb_id, mediaType);
 }
-
 function closeDetail() {
   modal.classList.remove("open");
   document.body.classList.remove("modal-open");
   _openDetailId = null;
   _sourcesOpenId = null;
+  _sourcesCache = [];
 }
 document.getElementById("closeModal").addEventListener("click", closeDetail);
 modal.addEventListener("click", e => { if (e.target === modal) closeDetail(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && modal.classList.contains("open")) closeDetail(); });
-
 function renderModalBody(m) {
   const watched = !!m.watched;
   const icon = m.type === "series" ? "📺" : "🎬";
@@ -854,16 +840,12 @@ function renderModalBody(m) {
   const isSeries = m.type === "series";
   const notAvailable = (m.name || "").startsWith("⏳");
   const id = JSON.stringify(m.id);
-
   modalHero.style.backgroundImage = m.poster ? `url('${m.poster}')` : "none";
-
   const toggle = watched
     ? `<button class="ghost small" onclick='setWatched(${id}, false, this)'>↩︎ Remettre à voir</button>`
     : `<button class="ghost small" onclick='setWatched(${id}, true, this)'>✓ Marquer vu</button>`;
-
   const sourcesBtn = (!watched && !isSeries)
     ? `<button class="ghost small" onclick='toggleSources(${id}, this)'>⬇️ Télécharger</button>` : "";
-
   let pcStatusHtml = "";
   let precacheBtn = "";
   if (!watched && notAvailable) {
@@ -888,7 +870,6 @@ function renderModalBody(m) {
       precacheBtn = `<div class="modal-actions"><button class="ghost small" onclick='precache(${id}, this)'>📥 Précharger</button></div>`;
     }
   }
-
   modalContent.innerHTML = `
     <div class="modal-top">
       <div class="modal-poster">${m.poster ? `<img src="${m.poster}" alt="">` : `<div class="noposter">${escapeHtml(m.name)}</div>`}</div>
@@ -909,7 +890,6 @@ function renderModalBody(m) {
   `;
   _loadTrailer(m.tmdb_id, m.type);
 }
-
 function triggerDownload(url, filename) {
   const a = document.createElement("a");
   a.href = url;
@@ -918,7 +898,6 @@ function triggerDownload(url, filename) {
   a.click();
   a.remove();
 }
-
 function copyToClipboard(text) {
   const fallback = () => {
     const ta = document.createElement("textarea");
@@ -939,7 +918,6 @@ function copyToClipboard(text) {
     fallback();
   }
 }
-
 // Liste détaillée des sources (façon Ludio) — repli manuel pour choisir
 // soi-même quand le bouton Télécharger automatique ne convient pas.
 let _sourcesOpenId = null;
@@ -948,7 +926,6 @@ let _sourcesOpenId = null;
 // dans un attribut HTML — un titre contenant une apostrophe cassait
 // l'échappement précédent (relevé par une revue GLM, 2026-08-15).
 let _sourcesCache = [];
-
 async function toggleSources(imdbId, btn) {
   const slot = document.getElementById("sources-slot");
   if (_sourcesOpenId === imdbId) { slot.innerHTML = ""; _sourcesOpenId = null; _sourcesCache = []; return; }
@@ -963,45 +940,39 @@ async function toggleSources(imdbId, btn) {
     const size = f.size_gb ? `${f.size_gb} Go` : "taille inconnue";
     const meta = `<div class="fi-meta"><span>${escapeHtml(f.source)} · ${size}${f.resolution ? " · " + f.resolution + "p" : ""}</span>${f.cached ? ' <span class="cached-badge">⚡ en cache</span>' : ""}</div>`;
     const title = `<div class="fi-title">${escapeHtml(f.title)}</div>`;
-
     // Candidat Lumio pas encore résolu (pas d'appel Lumio tant que
     // l'utilisateur n'a pas choisi celui-ci).
     // Toute la carte est cliquable (une seule action possible ici,
     // contrairement aux sources Wacustom qui ont copier + AllDebrid).
     if (f.lumio_playback_url) {
       return `
-      <div class="found-item clickable" id="src-lumio-${idx}" onclick="resolveLumioSourceByIndex(${idx}, this)">
-        ${title}${meta}
-      </div>`;
+        <div class="found-item clickable" id="src-lumio-${idx}" onclick="resolveLumioSourceByIndex(${idx}, this)">
+          ${title}${meta}
+        </div>`;
     }
-
     const isMagnet = (f.link || "").startsWith("magnet:");
     return `
-    <div class="found-item">
-      ${title}${meta}
-      <div class="fi-actions">
-        <a class="copy" onclick="copySourceLinkByIndex(${idx})">copier</a>
-        ${isMagnet ? `<button class="ghost small" style="padding:.25rem .55rem;min-height:auto;" onclick="startSourceDownloadByIndex(${idx}, this)">⬇️ AllDebrid</button>` : ""}
+      <div class="found-item">
+        ${title}${meta}
+        <div class="fi-actions">
+          <a class="copy" onclick="copySourceLinkByIndex(${idx})">copier</a>
+          ${isMagnet ? `<button class="ghost small" style="padding:.25rem .55rem;min-height:auto;" onclick="startSourceDownloadByIndex(${idx}, this)">⬇️ AllDebrid</button>` : ""}
+        </div>
       </div>
-    </div>
-    ${isMagnet ? `<div id="src-ad-${idx}"></div>` : ""}`;
+      ${isMagnet ? `<div id="src-ad-${idx}"></div>` : ""}`;
   }).join("") + "</div>";
 }
-
 function copySourceLinkByIndex(idx) {
   copyToClipboard(_sourcesCache[idx].link || "");
 }
-
 function resolveLumioSourceByIndex(idx, card) {
   const f = _sourcesCache[idx];
   return resolveLumioSource(idx, f.lumio_playback_url, f.title, _sourcesOpenId, card);
 }
-
 function startSourceDownloadByIndex(idx, btn) {
   const f = _sourcesCache[idx];
   return startSourceDownload(idx, f.link, _sourcesOpenId, btn);
 }
-
 async function resolveLumioSource(idx, playbackUrl, filename, imdbId, card) {
   if (card.dataset.busy) return;
   card.dataset.busy = "1";
@@ -1025,7 +996,6 @@ async function resolveLumioSource(idx, playbackUrl, filename, imdbId, card) {
     delete card.dataset.busy;
   }
 }
-
 function renderSourceADResult(idx, data, magnetId, imdbId, btn) {
   const resultEl = document.getElementById("src-ad-" + idx);
   if (data.ready) {
@@ -1042,7 +1012,6 @@ function renderSourceADResult(idx, data, magnetId, imdbId, btn) {
     btn.setAttribute("onclick", `recheckSourceStatus(${idx}, ${magnetId}, '${escapeHtml(imdbId)}', this)`);
   }
 }
-
 async function startSourceDownload(idx, magnet, imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
@@ -1059,7 +1028,6 @@ async function startSourceDownload(idx, magnet, imdbId, btn) {
     btn.textContent = "⬇️ AllDebrid";
   }
 }
-
 async function recheckSourceStatus(idx, magnetId, imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
@@ -1074,7 +1042,6 @@ async function recheckSourceStatus(idx, magnetId, imdbId, btn) {
   }
   renderSourceADResult(idx, data, magnetId, imdbId, btn);
 }
-
 async function precache(imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
@@ -1097,7 +1064,6 @@ async function precache(imdbId, btn) {
     btn.disabled = false; btn.textContent = "📥 Précharger";
   }
 }
-
 async function checkPrecache(imdbId, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
@@ -1116,7 +1082,6 @@ async function checkPrecache(imdbId, btn) {
     btn.textContent = "🔄 Vérifier"; btn.disabled = false;
   }
 }
-
 async function precacheSeason(imdbId, btn) {
   const input = document.getElementById("season-" + imdbId);
   const season = parseInt(input.value, 10) || 1;
@@ -1154,19 +1119,16 @@ async function precacheSeason(imdbId, btn) {
     btn.textContent = originalLabel;
   }
 }
-
 function seasonStatusHtml(imdbId, season, episodes, total) {
   const entries = Object.entries(episodes || {});
   const done = entries.filter(([, i]) => i.status === "ready" || i.status === "cached").length;
   const stuckEntries = entries.filter(([, i]) => i.status === "failed" || i.status === "none");
   const tooRecent = entries.filter(([, i]) => i.status === "too_recent").length;
   const pending = entries.length - done - stuckEntries.length - tooRecent;
-
   let html = `<b>Saison ${season}</b> : ${done}/${total || entries.length} prêt(s)`;
   if (pending > 0) html += `, ${pending} en cours`;
   const unavailable = stuckEntries.length + tooRecent;
   if (unavailable > 0) html += `, ${unavailable} indisponible(s)`;
-
   if (stuckEntries.length) {
     html += '<div class="ep-manual">';
     for (const [ep, info] of stuckEntries) {
@@ -1179,7 +1141,6 @@ function seasonStatusHtml(imdbId, season, episodes, total) {
   }
   return { html, pending, stuckCount: stuckEntries.length };
 }
-
 async function checkPrecacheSeason(imdbId, season, btn) {
   btn.disabled = true;
   btn.textContent = "⏳ ...";
@@ -1192,7 +1153,6 @@ async function checkPrecacheSeason(imdbId, season, btn) {
   if (pending === 0 && stuckCount === 0) { btn.remove(); }
   else { btn.textContent = "🔄 Vérifier S" + season; btn.disabled = false; }
 }
-
 async function addMagnetEpisode(imdbId, season, ep, btn) {
   const input = document.getElementById(`magnet-${imdbId}-${season}-${ep}`);
   const magnet = input.value.trim();
@@ -1208,7 +1168,6 @@ async function addMagnetEpisode(imdbId, season, ep, btn) {
   input.disabled = true;
   btn.remove();
 }
-
 async function setWatched(imdbId, watched, btn) {
   btn.disabled = true;
   const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId + "/watched", {
@@ -1217,25 +1176,21 @@ async function setWatched(imdbId, watched, btn) {
   if (r.ok) { toast(watched ? "Marqué comme vu" : "Remis à voir"); reloadWatchlist(); }
   else btn.disabled = false;
 }
-
 async function remove(imdbId, btn) {
   if (!confirm("Retirer ce titre de la liste ?")) return;
   btn.disabled = true;
   const r = await apiFetch(`${BASE}/api/watchlist/` + imdbId, { method: "DELETE" });
   if (r.ok) { toast("Retiré"); closeDetail(); reloadWatchlist(); } else { btn.disabled = false; }
 }
-
 function escapeHtml(s) {
   return (s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
-
 document.getElementById("q").addEventListener("keydown", e => { if (e.key === "Enter") search(); });
 document.getElementById("user").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
 document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
 document.getElementById("user").value = USER;
 loadVersionBadge();
 autoUnlock();
-
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});
 }

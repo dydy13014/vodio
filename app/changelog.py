@@ -5,9 +5,20 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 CHANGELOG = [
+    {
+        "version": "0.10.0",
+        "date": "2026-08-15",
+        "changes": [
+            "Nouveau design : header flottant, thème clair/sombre (bouton dédié, mémorisé), bandeau héros en carrousel avec pastilles, barre d'onglets en bas sur mobile",
+            "Reconnexion automatique si la session expire en cours d'usage, au lieu de boutons qui échouent silencieusement",
+            "Confirmation avant de retirer un titre de la liste",
+            "Bouton Déconnexion",
+            "ETA sur les films trop récents pour être disponibles (« dispo estimée dans ~N j »)",
+        ],
+    },
     {
         "version": "0.9.0",
         "date": "2026-08-15",

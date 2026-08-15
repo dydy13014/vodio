@@ -5,9 +5,20 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 
 CHANGELOG = [
+    {
+        "version": "0.11.0",
+        "date": "2026-08-15",
+        "changes": [
+            "Nouveau design « Dashboard » : barre latérale sur ordinateur, tableau de bord en tuiles (héros en carrousel, stats, liste récente), barre d'onglets étendue sur mobile (ajout d'un onglet Mises à jour/Déconnexion)",
+            "Bande-annonce, ETA, reconnexion automatique et déconnexion portés dans le nouveau design",
+            "Correction : un titre avec une apostrophe (très courant en français) cassait le clic sur les résultats de recherche et les sorties cinéma",
+            "Correction : les titres de la section « Sorties Digitales Récentes » s'affichaient vides",
+            "Correction : la liste de sources ne gérait pas les candidats Lumio (copiait un lien vide au lieu de proposer la résolution)",
+        ],
+    },
     {
         "version": "0.10.0",
         "date": "2026-08-15",

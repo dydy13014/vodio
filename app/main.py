@@ -32,10 +32,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
-from . import alldebrid, availability, changelog, cinema_scraper, notify, scraper, tmdb
+from . import alldebrid, availability, c411_feed, changelog, cinema_scraper, notify, scraper, tmdb
 from .watchlist import Watchlist
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
@@ -46,6 +46,12 @@ ALLOCINE_PAGES = int(os.environ.get("ALLOCINE_PAGES", "3"))
 REFRESH_HOURS = int(os.environ.get("REFRESH_HOURS", "24"))
 DATA_FILE = Path(os.environ.get("DATA_FILE", "/app/data/catalog.json"))
 CINEMA_DATA_FILE = Path(os.environ.get("CINEMA_DATA_FILE", "/app/data/cinema.json"))
+# Nouveautés torrent C411 (docs/séries étrangères absents d'AlloCiné VOD) —
+# facultatif : source désactivée si les identifiants ne sont pas fournis.
+C411_URL = os.environ.get("C411_URL", "")
+C411_API_KEY = os.environ.get("C411_API_KEY", "")
+C411_DATA_FILE = Path(os.environ.get("C411_DATA_FILE", "/app/data/c411.json"))
+C411_LIMIT = int(os.environ.get("C411_LIMIT", "100"))
 WATCHLIST_FILE = os.environ.get("WATCHLIST_FILE", "/app/data/watchlist.json")
 VODIO_PASSWORD = os.environ.get("VODIO_PASSWORD", "")
 # Nom du compte principal dans le nouveau formulaire de connexion unifié —
@@ -74,7 +80,7 @@ MANIFEST = {
     # Personnalisable par instance : changer l'id évite les collisions si un
     # utilisateur installe plusieurs instances VODIO. Défaut = instance d'origine.
     "id": os.environ.get("VODIO_ADDON_ID", "org.eddy.vodio"),
-    "version": "1.4.0",
+    "version": "1.5.0",
     "name": os.environ.get("VODIO_ADDON_NAME", "VODIO"),
     "description": "Nouveautés VOD françaises (AlloCiné) + ma liste perso (films & séries)",
     "resources": ["catalog"],
@@ -87,6 +93,11 @@ MANIFEST = {
         # ✅/⏳ ne reflétait que notre propre check de dispo (Wacustom), pas le
         # vrai statut VOD, d'où la confusion (ex. LES K D'OR 2026-08-02).
         {"type": "movie", "id": "vodio-new", "name": "Nouveautés VOD"},
+        # Sourcé directement du tracker C411 (docs/séries étrangères absents
+        # d'AlloCiné VOD), filtré (audio FR, ≥720p) et croisé avec la même
+        # vérif de dispo que le reste de VODIO.
+        {"type": "movie", "id": "vodio-c411-new", "name": "Nouveautés Torrent"},
+        {"type": "series", "id": "vodio-c411-new", "name": "Nouveautés Torrent"},
         {"type": "movie", "id": "vodio-watchlist", "name": "VODIO - Ma liste"},
         {"type": "series", "id": "vodio-watchlist", "name": "VODIO - Ma liste"},
     ],
@@ -95,6 +106,7 @@ MANIFEST = {
 
 state = {"metas": [], "last_refresh": 0.0, "last_error": ""}
 state_cinema = {"metas": [], "last_refresh": 0.0, "last_error": ""}
+state_c411 = {"metas": [], "last_refresh": 0.0, "last_error": ""}
 watchlist = Watchlist(WATCHLIST_FILE)
 
 
@@ -160,6 +172,14 @@ def load_cache() -> None:
             log.info("cache cinéma chargé : %d films", len(state_cinema["metas"]))
         except (json.JSONDecodeError, KeyError) as exc:
             log.warning("cache cinéma illisible, ignoré : %s", exc)
+    if C411_DATA_FILE.exists():
+        try:
+            data = json.loads(C411_DATA_FILE.read_text())
+            state_c411["metas"] = data["metas"]
+            state_c411["last_refresh"] = data["last_refresh"]
+            log.info("cache C411 chargé : %d titres", len(state_c411["metas"]))
+        except (json.JSONDecodeError, KeyError) as exc:
+            log.warning("cache C411 illisible, ignoré : %s", exc)
 
 
 def save_cache() -> None:
@@ -173,6 +193,13 @@ def save_cache_cinema() -> None:
     CINEMA_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
     CINEMA_DATA_FILE.write_text(
         json.dumps({"metas": state_cinema["metas"], "last_refresh": state_cinema["last_refresh"]})
+    )
+
+
+def save_cache_c411() -> None:
+    C411_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    C411_DATA_FILE.write_text(
+        json.dumps({"metas": state_c411["metas"], "last_refresh": state_c411["last_refresh"]})
     )
 
 
@@ -278,6 +305,50 @@ async def refresh_cinema() -> None:
     log.info("refresh cinéma OK : %d films", len(metas))
 
 
+async def refresh_c411() -> None:
+    """Nouveautés torrent C411 — complète AlloCiné (docs/séries étrangères
+    absents de sa page VOD), filtré (audio FR, ≥QUALITY_MIN) et badgé via le
+    même mécanisme AIOStreams que le catalogue AlloCiné. Source facultative :
+    ne fait rien si C411_URL/C411_API_KEY ne sont pas configurés."""
+    if not C411_URL or not C411_API_KEY:
+        return
+    items = await c411_feed.fetch_latest(C411_URL, C411_API_KEY, C411_LIMIT)
+    if not items:
+        state_c411["last_error"] = "C411 : 0 résultat (tracker down ou clé invalide ?)"
+        log.error(state_c411["last_error"])
+        return
+    relevant = c411_feed.filter_relevant(items, QUALITY_MIN)
+    metas: list[dict] = []
+    seen_ids: set[str] = set()
+    for item in relevant:
+        meta = await tmdb.build_meta_from_external(
+            TMDB_API_KEY, item.get("imdb_id"), item.get("tmdb_id"), item["media_type"]
+        )
+        if not meta or meta["id"] in seen_ids:
+            continue
+        seen_ids.add(meta["id"])
+        metas.append(meta)
+    # Films uniquement filtrés sur l'année en cours (un vieux film reposté sur
+    # le tracker n'est pas une "nouveauté") — pas les séries : un nouvel
+    # épisode d'une série ancienne (ex. Silo, 2023) reste une vraie nouveauté,
+    # exclure sur l'année de première diffusion serait contre-productif.
+    current_year = str(datetime.date.today().year)
+    metas = [
+        m for m in metas
+        if m["type"] == "series" or m.get("releaseInfo") == current_year
+    ]
+    if not metas:
+        state_c411["last_error"] = "C411 : 0 titre matché après filtre"
+        log.error(state_c411["last_error"])
+        return
+    await _badge(metas)
+    state_c411["metas"] = metas
+    state_c411["last_refresh"] = time.time()
+    state_c411["last_error"] = ""
+    save_cache_c411()
+    log.info("refresh C411 OK : %d titres (%d bruts, %d après filtre)", len(metas), len(items), len(relevant))
+
+
 _BADGE_RE = re.compile(r"^[✅⏳⚡]+\s*")
 
 
@@ -300,6 +371,11 @@ async def refresh_loop() -> None:
         except Exception:
             log.exception("refresh cinéma en échec")
             state_cinema["last_error"] = "refresh : exception (voir logs)"
+        try:
+            await refresh_c411()
+        except Exception:
+            log.exception("refresh C411 en échec")
+            state_c411["last_error"] = "refresh : exception (voir logs)"
         await asyncio.sleep(REFRESH_HOURS * 3600)
 
 
@@ -452,6 +528,18 @@ async def catalog_new():
     return JSONResponse({"metas": metas}, headers=CORS)
 
 
+@app.get("/catalog/movie/vodio-c411-new.json")
+async def catalog_c411_movie():
+    metas = [_clean_name(m) for m in state_c411["metas"] if m.get("type") == "movie"]
+    return JSONResponse({"metas": metas}, headers=CORS)
+
+
+@app.get("/catalog/series/vodio-c411-new.json")
+async def catalog_c411_series():
+    metas = [_clean_name(m) for m in state_c411["metas"] if m.get("type") == "series"]
+    return JSONResponse({"metas": metas}, headers=CORS)
+
+
 @app.get("/catalog/movie/vodio-watchlist.json")
 async def catalog_watchlist_movie():
     return JSONResponse({"metas": watchlist.metas("movie")}, headers=CORS_LIVE)
@@ -492,9 +580,20 @@ async def pwa_icon(icon: str):
 # ── Anciennes URLs par personne (/u/<nom>/…, retirées le 2026-08-14) : simple
 # redirection vers l'accueil pour les favoris/PWA déjà installés côté client,
 # le nouveau formulaire de connexion prend le relais. ───────────────────────
+#
+# ⚠️ La redirection doit être ABSOLUE et inclure le préfixe public. En WAN,
+# Traefik sert l'app sous /vodio et retire ce préfixe (stripprefix) : un
+# `url="/"` renvoyait donc le visiteur à la racine du DOMAINE, c'est-à-dire
+# sur StreamFusion, qui redirige lui-même vers /configure — page réservée à
+# l'IP d'administration, donc 403. Cinq de ces 403 suffisaient à déclencher
+# un bannissement fail2ban : un utilisateur légitime ouvrant un ancien favori
+# se faisait bannir sur TOUS les ports (cas réel, 2026-08-16).
+# Le préfixe est lu dans l'en-tête X-Forwarded-Prefix posé par Traefik, avec
+# repli sur "/" en accès direct (LAN, sans reverse proxy).
 @app.get("/u/{name}/{rest:path}")
-async def legacy_user_url(name: str, rest: str = ""):
-    return RedirectResponse(url="/")
+async def legacy_user_url(request: Request, name: str, rest: str = ""):
+    prefix = (request.headers.get("x-forwarded-prefix") or "").rstrip("/")
+    return RedirectResponse(url=f"{prefix}/" if prefix else "/")
 
 
 # ── Endpoints de gestion (protégés, identité résolue depuis les identifiants
@@ -507,6 +606,11 @@ async def api_vod(_: Watchlist = Depends(resolve_session)):
 @app.get("/api/cinema")
 async def api_cinema(_: Watchlist = Depends(resolve_session)):
     return {"items": state_cinema["metas"], "last_refresh": state_cinema["last_refresh"]}
+
+
+@app.get("/api/c411")
+async def api_c411(_: Watchlist = Depends(resolve_session)):
+    return {"items": state_c411["metas"], "last_refresh": state_c411["last_refresh"]}
 
 
 @app.get("/api/search")
@@ -982,5 +1086,6 @@ async def health():
         "watchlist": len(watchlist.items),
         "last_refresh_age_hours": round(age_h, 1),
         "last_error": state["last_error"],
+        "c411_titles": len(state_c411["metas"]),
     }
     return JSONResponse(body, status_code=200 if ok else 503)

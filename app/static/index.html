@@ -345,6 +345,8 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
       <div class="standard-grid" id="vod-new"></div>
       <div class="section-header" style="margin-top:3rem;">Sorties Digitales Récentes</div>
       <div class="standard-grid" id="vod-digital"></div>
+      <div class="section-header" style="margin-top:3rem;">Nouveautés Torrent (C411)</div>
+      <div class="standard-grid" id="vod-c411"></div>
     </div>
 
     <!-- TAB: CINEMA -->
@@ -493,6 +495,7 @@ async function autoUnlock() {
 let _watchlistCache = [];
 let _searchCache = [];
 let _cinemaCache = [];
+let _c411Cache = [];
 let _heroItems = [];
 let _heroIndex = 0;
 let _heroTimer = null;
@@ -629,6 +632,31 @@ function createPosterHTML(m, isWatched = false) {
   `;
 }
 
+function createC411PosterHTML(m, i) {
+  const poster = m.poster ? `<img src="${m.poster}" loading="lazy">` : `<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--muted);font-size:0.8rem;">Pas d'image</div>`;
+  const isAvailable = (m.name || "").startsWith("✅");
+  const chipClass = isAvailable ? 'ok' : 'wait';
+  const chipText = isAvailable ? 'Dispo' : 'Attente';
+  return `
+    <div class="poster-item" onclick="openCatalogDetailByIndex('c411', ${i})">
+      <div class="poster-img-wrap">
+        ${poster}
+        <span class="chip ${chipClass}">${chipText}</span>
+      </div>
+      <div class="poster-title">${escapeHtml((m.name||"").replace(/^[✅⏳⚡]+\s*/, ""))}</div>
+      <div class="poster-meta">${m.releaseInfo || ''}</div>
+    </div>
+  `;
+}
+
+async function loadC411() {
+  const r = await apiFetch(`${BASE}/api/c411`);
+  if (!r.ok) return;
+  const items = (await r.json()).items;
+  _c411Cache = items;
+  document.getElementById("vod-c411").innerHTML = items.map((m, i) => createC411PosterHTML(m, i)).join("");
+}
+
 // Search
 async function search() {
   const q = document.getElementById("q").value.trim();
@@ -690,6 +718,8 @@ async function loadVod() {
       // "releaseInfo" doit être dérivé de "year".
       document.getElementById("vod-digital").innerHTML = dItems.map(m => createPosterHTML({...m, releaseInfo: m.year})).join("");
   }
+
+  loadC411();
 }
 
 async function loadCinema() {
@@ -809,9 +839,9 @@ function openDetail(id) {
 }
 
 function openCatalogDetailByIndex(which, i) {
-   const m = which === 'search' ? _searchCache[i] : _cinemaCache[i];
+   const m = which === 'search' ? _searchCache[i] : (which === 'c411' ? _c411Cache[i] : _cinemaCache[i]);
    if (!m) return;
-   const type = which === 'cinema' ? 'movie' : (m.media_type || 'movie');
+   const type = which === 'cinema' ? 'movie' : (m.media_type || m.type || 'movie');
    openCatalogDetail(m, type);
 }
 
@@ -934,7 +964,6 @@ async function resolveLumioSourceByIndex(idx) {
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail || "Résolution impossible");
       window.open(data.download_url, '_blank');
-      toast("Téléchargement lancé");
       status.innerHTML = '<div class="source-substatus ok">✅ Téléchargement lancé</div>';
    } catch(e) {
       status.innerHTML = `<div class="source-substatus err">❌ ${escapeHtml(e.message)}</div>`;

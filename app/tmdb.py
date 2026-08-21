@@ -233,6 +233,54 @@ async def build_meta_from_tmdb(
     return meta
 
 
+async def build_meta_from_external(
+    api_key: str, imdb_id: str | None, tmdb_id: int | None, media_type_hint: str,
+) -> dict | None:
+    """Construit un meta Stremio à partir d'un item source qui fournit déjà
+    un imdb_id et/ou tmdb_id (ex. C411/Torznab) — pas de recherche floue par
+    titre comme `match_film`, donc bien plus fiable quand l'identifiant est
+    disponible."""
+    if tmdb_id:
+        return await build_meta_from_tmdb(api_key, tmdb_id, media_type_hint)
+    if not imdb_id:
+        return None
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            resp = await client.get(
+                f"{API}/find/{imdb_id}",
+                params={"api_key": api_key, "external_source": "imdb_id", "language": "fr-FR"},
+            )
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            log.warning("build_meta_from_external %s en échec : %s", imdb_id, exc)
+            return None
+    data = resp.json()
+    media_type = media_type_hint
+    results = data.get("tv_results" if media_type == "series" else "movie_results", [])
+    if not results:
+        # La catégorie source pouvait être fausse (constaté sur C411) : on
+        # retente l'autre type avant d'abandonner.
+        media_type = "movie" if media_type == "series" else "series"
+        results = data.get("tv_results" if media_type == "series" else "movie_results", [])
+    if not results:
+        log.info("pas de correspondance TMDB pour imdb:%s", imdb_id)
+        return None
+    r = results[0]
+    meta = {
+        "id": imdb_id,
+        "type": media_type,
+        "tmdb_id": r["id"],
+        "name": r.get("title") or r.get("name", ""),
+        "description": r.get("overview", ""),
+    }
+    if r.get("poster_path"):
+        meta["poster"] = IMG + r["poster_path"]
+    date = r.get("release_date") or r.get("first_air_date")
+    if date:
+        meta["releaseInfo"] = date[:4]
+    return meta
+
+
 async def get_trailer(api_key: str, tmdb_id: int, media_type: str = "movie") -> str | None:
     """Clé YouTube de la bande-annonce officielle (endpoint TMDB dédié
     /videos, pas dans les détails de base) — récupérée à la demande à

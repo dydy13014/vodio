@@ -345,7 +345,7 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
       <div class="standard-grid" id="vod-new"></div>
       <div class="section-header" style="margin-top:3rem;">Sorties Digitales Récentes</div>
       <div class="standard-grid" id="vod-digital"></div>
-      <div class="section-header" style="margin-top:3rem;">Nouveautés Torrent (C411)</div>
+      <div class="section-header" style="margin-top:3rem;">Nouveautés Torrent</div>
       <div class="standard-grid" id="vod-c411"></div>
     </div>
 
@@ -387,9 +387,9 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
       <p class="modal-desc" id="modalDesc"></p>
 
       <div class="modal-actions" id="modalActions"></div>
-      <div id="trailer-slot"></div>
-
       <div id="modal-extra"></div>
+
+      <div id="trailer-slot"></div>
     </div>
   </div>
 </div>
@@ -496,7 +496,10 @@ let _watchlistCache = [];
 let _searchCache = [];
 let _cinemaCache = [];
 let _c411Cache = [];
+let _vodCache = [];
+let _vodDigitalCache = [];
 let _heroItems = [];
+let _heroAvailable = false;
 let _heroIndex = 0;
 let _heroTimer = null;
 const _tabLoaded = { vod: false, cinema: false, changelog: false };
@@ -546,10 +549,16 @@ function _renderHeroSlide(pick) {
     bg.style.backgroundImage = `url('${pick.backdrop || pick.poster}')`;
     document.getElementById("hero-title").textContent = pick.name;
     document.getElementById("hero-sub").textContent = pick.overview || "";
-    document.getElementById("hero-meta").innerHTML = `<span class="pill">🔥 Tendance</span> ${pick.year ? `<span class="pill">${pick.year}</span>` : ''}`;
+    const badge = _heroAvailable ? '🧲 Dispo en DL' : '🔥 Tendance';
+    document.getElementById("hero-meta").innerHTML = `<span class="pill">${badge}</span> ${pick.year ? `<span class="pill">${pick.year}</span>` : ''}`;
 
     const btn = document.getElementById("hero-add");
-    btn.onclick = () => openCatalogDetail(pick, 'movie'); // Ouvre la fiche (bande-annonce, description) plutôt qu'un ajout direct
+    // Ouvre la fiche (bande-annonce, description) plutôt qu'un ajout direct.
+    // Provenance transmise si l'en-tête montre un titre du catalogue Nouveautés
+    // Torrent (_heroAvailable) — sinon "La captura" et consorts perdent leur
+    // exemption du garde-fou anti-CAM à l'ajout (bug réel corrigé le 2026-08-22 :
+    // ajouté avec "En attente ~44j" malgré une vraie source WEB/2160p sur V3X).
+    btn.onclick = () => openCatalogDetail(pick, 'movie', _heroAvailable ? 'c411' : undefined);
 
     bg.style.opacity = 1;
   }, 300);
@@ -559,13 +568,38 @@ function _renderHeroSlide(pick) {
 
 async function loadHero() {
   try {
-    const r = await apiFetch(`${BASE}/api/trending`);
-    if (!r.ok) return;
-    const trending = (await r.json()).items;
-    if (!trending.length) return;
+    // Priorité aux films du catalogue Nouveautés Torrent déjà confirmés
+    // disponibles (badge ✅, ce que la fonction Télécharger sait vraiment
+    // gérer — films uniquement) : plus utile qu'une tendance TMDB générique
+    // qui peut très bien n'être disponible nulle part chez nous. Repli sur
+    // /api/trending si rien n'est encore dispo (trackers pas configurés,
+    // ou catalogue pas encore rafraîchi) pour ne jamais laisser l'en-tête vide.
+    const cr = await apiFetch(`${BASE}/api/c411`);
+    let items = [];
+    let isAvailableSet = false;
+    if (cr.ok) {
+      const c411Items = (await cr.json()).items || [];
+      items = c411Items
+        .filter(m => m.type === 'movie' && (m.name || '').startsWith('🧲'))
+        .map(m => ({
+          id: m.id, tmdb_id: m.tmdb_id,
+          name: (m.name || '').replace(/^[✅⏳⚡🧲]+\s*/, ''),
+          overview: m.description || '', year: m.releaseInfo || '',
+          backdrop: m.poster, poster: m.poster,
+        }));
+      isAvailableSet = items.length > 0;
+    }
 
-    _heroItems = trending;
+    if (!items.length) {
+      const r = await apiFetch(`${BASE}/api/trending`);
+      if (!r.ok) return;
+      items = (await r.json()).items;
+      if (!items.length) return;
+    }
+
+    _heroItems = items;
     _heroIndex = 0;
+    _heroAvailable = isAvailableSet;
 
     const dotsContainer = document.getElementById("hero-dots");
     dotsContainer.innerHTML = _heroItems.map((_, i) => `<div class="hero-dot ${i===0?'active':''}" onclick="goHero(${i})"></div>`).join("");
@@ -615,10 +649,11 @@ function renderWatchlist(items) {
 
 function createPosterHTML(m, isWatched = false) {
   const poster = m.poster ? `<img src="${m.poster}" loading="lazy">` : `<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--muted);font-size:0.8rem;">Pas d'image</div>`;
-  const isAvailable = (m.name || "").startsWith("✅");
+  const isAvailable = (m.name || "").startsWith("🧲");
+  const isLumio = (m.name || "").startsWith("🧲⚡");
   const chipClass = isWatched ? 'watched' : (isAvailable ? 'ok' : 'wait');
   const etaTxt = (!isWatched && !isAvailable && m.eta_days) ? ` ~${m.eta_days}j` : '';
-  const chipText = isWatched ? 'Vu' : (isAvailable ? 'Dispo' : `Attente${etaTxt}`);
+  const chipText = isWatched ? 'Vu' : (isAvailable ? (isLumio ? '🧲⚡ Dispo' : '🧲 Dispo') : `⏳ Attente${etaTxt}`);
 
   return `
     <div class="poster-item" onclick='openDetail(${JSON.stringify(m.id)})'>
@@ -626,24 +661,25 @@ function createPosterHTML(m, isWatched = false) {
         ${poster}
         <span class="chip ${chipClass}">${chipText}</span>
       </div>
-      <div class="poster-title">${escapeHtml((m.name||"").replace(/^[✅⏳⚡]+\s*/, ""))}</div>
+      <div class="poster-title">${escapeHtml((m.name||"").replace(/^[✅⏳⚡🧲]+\s*/, ""))}</div>
       <div class="poster-meta">${m.releaseInfo || ''}</div>
     </div>
   `;
 }
 
-function createC411PosterHTML(m, i) {
+function createC411PosterHTML(m, i, which = 'c411') {
   const poster = m.poster ? `<img src="${m.poster}" loading="lazy">` : `<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--muted);font-size:0.8rem;">Pas d'image</div>`;
-  const isAvailable = (m.name || "").startsWith("✅");
+  const isAvailable = (m.name || "").startsWith("🧲");
+  const isLumio = (m.name || "").startsWith("🧲⚡");
   const chipClass = isAvailable ? 'ok' : 'wait';
-  const chipText = isAvailable ? 'Dispo' : 'Attente';
+  const chipText = isAvailable ? (isLumio ? '🧲⚡ Dispo' : '🧲 Dispo') : '⏳ Attente';
   return `
-    <div class="poster-item" onclick="openCatalogDetailByIndex('c411', ${i})">
+    <div class="poster-item" onclick="openCatalogDetailByIndex('${which}', ${i})">
       <div class="poster-img-wrap">
         ${poster}
         <span class="chip ${chipClass}">${chipText}</span>
       </div>
-      <div class="poster-title">${escapeHtml((m.name||"").replace(/^[✅⏳⚡]+\s*/, ""))}</div>
+      <div class="poster-title">${escapeHtml((m.name||"").replace(/^[✅⏳⚡🧲]+\s*/, ""))}</div>
       <div class="poster-meta">${m.releaseInfo || ''}</div>
     </div>
   `;
@@ -710,15 +746,28 @@ async function add(tmdbId, mediaType, btn, source) {
 async function loadVod() {
   const r = await apiFetch(`${BASE}/api/vod`);
   if(!r.ok) return;
-  const items = (await r.json()).items;
-  document.getElementById("vod-new").innerHTML = items.map(m => createPosterHTML(m)).join("");
+  // Index-based (pas createPosterHTML/openDetail, qui ne cherche que dans
+  // la watchlist) : un film "Nouveautés VOD" pas encore ajouté doit quand
+  // même pouvoir s'ouvrir — bug réel corrigé le 2026-08-22, le clic ne
+  // faisait jusqu'ici rien du tout sur un titre non déjà dans la liste.
+  _vodCache = (await r.json()).items;
+  document.getElementById("vod-new").innerHTML = _vodCache.map((m, i) => createC411PosterHTML(m, i, 'vod')).join("");
 
   const dr = await apiFetch(`${BASE}/api/digital-releases`);
   if(dr.ok) {
-      const dItems = (await dr.json()).items;
       // Le backend renvoie déjà "name" (pas "title") pour ces items — seul
-      // "releaseInfo" doit être dérivé de "year".
-      document.getElementById("vod-digital").innerHTML = dItems.map(m => createPosterHTML({...m, releaseInfo: m.year})).join("");
+      // "releaseInfo" doit être dérivé de "year". Pas de badge dispo ici
+      // (jamais vérifié pour cette liste, contrairement à Nouveautés VOD).
+      _vodDigitalCache = (await dr.json()).items.map(m => ({...m, releaseInfo: m.year}));
+      document.getElementById("vod-digital").innerHTML = _vodDigitalCache.map((m, i) => `
+        <div class="poster-item" onclick="openCatalogDetailByIndex('vod-digital', ${i})">
+          <div class="poster-img-wrap">
+            ${m.poster ? `<img src="${m.poster}" loading="lazy">` : '<div style="width:100%;height:100%;display:grid;place-items:center;color:var(--muted);">?</div>'}
+          </div>
+          <div class="poster-title">${escapeHtml(m.name||"")}</div>
+          <div class="poster-meta">${m.releaseInfo || ''}</div>
+        </div>
+      `).join("");
   }
 
   loadC411();
@@ -782,12 +831,13 @@ function openDetail(id) {
   _openDetailId = id;
 
   document.getElementById("modalHero").style.backgroundImage = m.poster ? `url('${m.poster}')` : 'none';
-  document.getElementById("modalTitle").textContent = (m.name||"").replace(/^[✅⏳⚡]+\s*/, "");
+  document.getElementById("modalTitle").textContent = (m.name||"").replace(/^[✅⏳⚡🧲]+\s*/, "");
 
   const isSeries = m.type === 'series';
-  const isAvailable = (m.name||"").startsWith("✅");
+  const isAvailable = (m.name||"").startsWith("🧲");
+  const isLumio = (m.name||"").startsWith("🧲⚡");
   const isWatched = m.watched;
-  const statusText = isWatched ? 'Vu' : (isAvailable ? 'Disponible' : `En attente${m.eta_days ? ` (~${m.eta_days} j)` : ''}`);
+  const statusText = isWatched ? 'Vu' : (isAvailable ? (isLumio ? '🧲⚡ Disponible' : '🧲 Disponible') : `⏳ En attente${m.eta_days ? ` (~${m.eta_days} j)` : ''}`);
 
   document.getElementById("modalMeta").innerHTML = `
      <span class="pill">${isSeries ? 'Série' : 'Film'}</span>
@@ -841,11 +891,12 @@ function openDetail(id) {
 }
 
 function openCatalogDetailByIndex(which, i) {
-   const m = which === 'search' ? _searchCache[i] : (which === 'c411' ? _c411Cache[i] : _cinemaCache[i]);
+   const CACHES = { search: _searchCache, cinema: _cinemaCache, c411: _c411Cache, vod: _vodCache, 'vod-digital': _vodDigitalCache };
+   const m = CACHES[which]?.[i];
    if (!m) return;
-   const type = which === 'cinema' ? 'movie' : (m.media_type || m.type || 'movie');
+   const type = (which === 'cinema' || which === 'vod' || which === 'vod-digital') ? 'movie' : (m.media_type || m.type || 'movie');
    // "c411" seul fait foi de provenance (exempte le titre du garde-fou anti-CAM
-   // à l'ajout, cf. availability.py) — 'search'/'cinema' ne transmettent rien.
+   // à l'ajout, cf. availability.py) — les autres ne transmettent rien.
    openCatalogDetail(m, type, which === 'c411' ? 'c411' : undefined);
 }
 

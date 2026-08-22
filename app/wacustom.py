@@ -43,9 +43,17 @@ async def get_streams(
 def extract_link(stream_url: str) -> str | None:
     """Décode le token de lecture Wacustom pour extraire le lien réel
     (magnet pour un torrent, URL d'hébergeur pour un DDL). None si le format
-    ne correspond pas à ce qu'on attend (changement côté Wacustom)."""
+    ne correspond pas à ce qu'on attend (changement côté Wacustom).
+
+    Depuis le rebase Wacustom 3.8.2 (2026-08-16), le token a un suffixe
+    ".<signature>" après le JSON base64 (`<b64json>.<hash>`, en plus d'un
+    éventuel "/<nom de fichier>" après le token) — jamais retiré ici avant,
+    ce qui faisait échouer le décodage base64 ("Incorrect padding",
+    silencieusement avalé par le except) sur 100% des flux Wacustom. Voir
+    aussi le bug jumeau sur le
+    format de config."""
     try:
-        token = stream_url.rsplit("/playback/", 1)[1].split("/", 1)[0]
+        token = stream_url.rsplit("/playback/", 1)[1].split("/", 1)[0].split(".", 1)[0]
         padding = "=" * (-len(token) % 4)
         data = json.loads(base64.urlsafe_b64decode(token + padding))
         return data.get("l")

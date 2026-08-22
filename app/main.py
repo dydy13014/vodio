@@ -3,7 +3,7 @@
 Deux catalogues :
 - `vodio-new` : nouveautés VOD scrapées d'AlloCiné (refresh 24h).
 - `vodio-watchlist` : films ajoutés à la main via la page web `/` (protégée par
-  mot de passe), avec badges de disponibilité ✅/⏳.
+  mot de passe), avec badges de disponibilité 🧲/⏳.
 
 Servi derrière Traefik en PathPrefix /vodio (stripprefix) : l'app expose tout à
 la racine. Manifest et catalogues Stremio restent publics ; seules les routes
@@ -63,10 +63,10 @@ VODIO_PASSWORD = os.environ.get("VODIO_PASSWORD", "")
 # compte (comportement historique conservé si la variable n'est pas définie).
 VODIO_DEFAULT_NAME = os.environ.get("VODIO_DEFAULT_NAME", "")
 STATIC_DIR = Path(__file__).parent / "static"
-# Badges ✅/⏳ via AIOStreams (config compte dydy) — désactivés si CONFIG absent
+# Badges 🧲/⏳ via AIOStreams (config compte dydy) — désactivés si CONFIG absent
 STREAM_CHECK_URL = os.environ.get("STREAM_CHECK_URL", "http://aiostreams:3000")
 STREAM_CHECK_CONFIG = os.environ.get("STREAM_CHECK_CONFIG", "")
-# Résolution minimale pour un badge ✅ (sinon ⏳). 720 = exclut CAM/TS/sans réso.
+# Résolution minimale pour un badge 🧲 (sinon ⏳). 720 = exclut CAM/TS/sans réso.
 QUALITY_MIN = int(os.environ.get("VODIO_QUALITY_MIN", "720"))
 # Badges watchlist : requête directe à Wacustom (bypass AIOStreams, qui tronque
 # parfois les résultats) + vérification active AllDebrid — réservé à la
@@ -94,7 +94,7 @@ MANIFEST = {
         # Un seul catalogue "nouveautés" (fusion de l'ancien vodio-soon) : tous
         # les films scrapés viennent de la page AlloCiné "Derniers films en
         # VOD" — par définition déjà sortis sur les plateformes VOD. Le split
-        # ✅/⏳ ne reflétait que notre propre check de dispo (Wacustom), pas le
+        # 🧲/⏳ ne reflétait que notre propre check de dispo (Wacustom), pas le
         # vrai statut VOD, d'où la confusion (ex. LES K D'OR 2026-08-02).
         {"type": "movie", "id": "vodio-new", "name": "Nouveautés VOD"},
         # Sourcé directement du tracker C411 (docs/séries étrangères absents
@@ -221,20 +221,21 @@ async def _badge_watchlist(metas: list[dict]) -> None:
         return
     if WACUSTOM_CONFIG:
         await availability.add_availability_badges_watchlist(
-            WACUSTOM_URL, WACUSTOM_CONFIG, ALLDEBRID_API_KEY, TMDB_API_KEY, metas, QUALITY_MIN
+            WACUSTOM_URL, WACUSTOM_CONFIG, ALLDEBRID_API_KEY, TMDB_API_KEY, metas, QUALITY_MIN,
+            verify_fn=_verify_on_trackers,
         )
     else:
         await _badge(metas)
 
 
 async def _refresh_watchlist_badges(label: str, wl: Watchlist, sms: bool = True) -> None:
-    """Rafraîchit les badges d'une watchlist + SMS sur les passages ⏳ → ✅.
+    """Rafraîchit les badges d'une watchlist + SMS sur les passages ⏳ → 🧲.
     `label` (nom d'utilisateur, vide pour le défaut) préfixe le SMS pour
     distinguer qui a un titre dispo — toutes les watchlists partagent le
     même numéro Free Mobile. `sms=False` (VODIO_NOSMS_USERS) désactive
     uniquement la notification, pas le calcul des badges."""
     current = wl.metas()  # non vus, avec les anciens badges
-    was_available = {m["id"]: m["name"].startswith("✅") for m in current}
+    was_available = {m["id"]: availability._is_available_name(m["name"]) for m in current}
     items = [_strip_badge(m) for m in current]
     if not items:
         return
@@ -244,10 +245,10 @@ async def _refresh_watchlist_badges(label: str, wl: Watchlist, sms: bool = True)
     if not sms:
         return
     for m in items:
-        if m["name"].startswith("✅") and not was_available.get(m["id"]):
+        if availability._is_available_name(m["name"]) and not was_available.get(m["id"]):
             title = _strip_badge(m)["name"]
             prefix = f"VODIO ({label})" if label else "VODIO"
-            await notify.send_sms(f"{prefix} : « {title} » est dispo ! ✅")
+            await notify.send_sms(f"{prefix} : « {title} » est dispo ! 🧲")
             log.info("SMS envoyé : %s dispo", title)
 
 
@@ -309,6 +310,33 @@ async def refresh_cinema() -> None:
     log.info("refresh cinéma OK : %d films", len(metas))
 
 
+def _configured_trackers() -> list[tuple[str, str, str]]:
+    tracker_configs = [
+        ("C411", C411_URL, C411_API_KEY),
+        ("Tr4ker", TR4KER_URL, TR4KER_API_KEY),
+        ("V3X", V3X_URL, V3X_API_KEY),
+    ]
+    return [(name, url, key) for name, url, key in tracker_configs if url and key]
+
+
+async def _verify_on_trackers(imdb_id: str) -> bool:
+    """Vérification live (watchlist uniquement, cf. `availability.py`) :
+    existe-t-il une release française ≥QUALITY_MIN pour cet imdb_id sur l'un
+    des trackers configurés ? Un appel par tracker (jamais plus), et
+    seulement pour un titre déjà bloqué par le garde-fou anti-CAM — pas de
+    risque de rejouer l'incident 429 du refresh bulk (une seule requête/tout
+    le catalogue, cf. `c411_feed.fetch_latest`)."""
+    for name, url, key in _configured_trackers():
+        items = await c411_feed.search_by_imdb(url, key, imdb_id, name=name)
+        # require_dub=True : une release VOSTFR prouve qu'un vrai fichier
+        # existe mais pas qu'il est en VF — lever le garde-fou anti-CAM sur
+        # cette seule preuve exposerait ensuite un cache Lumio VOSTFR comme
+        # "dispo" (cas réel 2026-08-22, "Mutiny").
+        if c411_feed.filter_relevant(items, QUALITY_MIN, require_dub=True):
+            return True
+    return False
+
+
 async def refresh_c411() -> None:
     """Nouveautés torrent — complète AlloCiné (docs/séries étrangères absents
     de sa page VOD), filtré (audio FR, ≥QUALITY_MIN) et badgé via le même
@@ -316,12 +344,7 @@ async def refresh_c411() -> None:
     trackers Torznab (C411, Tr4ker, V3X — même format chez les trois : une
     seule requête par tracker et par refresh, jamais une par titre). Source
     entièrement désactivée si aucun tracker n'est configuré."""
-    tracker_configs = [
-        ("C411", C411_URL, C411_API_KEY),
-        ("Tr4ker", TR4KER_URL, TR4KER_API_KEY),
-        ("V3X", V3X_URL, V3X_API_KEY),
-    ]
-    configured = [(name, url, key) for name, url, key in tracker_configs if url and key]
+    configured = _configured_trackers()
     if not configured:
         return
     items: list[dict] = []
@@ -365,11 +388,11 @@ async def refresh_c411() -> None:
     log.info("refresh C411 OK : %d titres (%d bruts, %d après filtre)", len(metas), len(items), len(relevant))
 
 
-_BADGE_RE = re.compile(r"^[✅⏳⚡]+\s*")
+_BADGE_RE = re.compile(r"^[✅⏳⚡🧲]+\s*")
 
 
 def _strip_badge(meta: dict) -> dict:
-    """Copie du meta sans le préfixe ✅/⚡/⏳ (pour recalculer proprement)."""
+    """Copie du meta sans le préfixe 🧲/⚡/⏳ (pour recalculer proprement)."""
     m = dict(meta)
     m["name"] = _BADGE_RE.sub("", m.get("name", ""))
     return m
@@ -453,7 +476,8 @@ async def _run_precache_season(wl: Watchlist, imdb_id: str, season: int, episode
         async with sem:
             try:
                 cand = await availability.find_precache_candidate(
-                    WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN, season, ep
+                    WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN, season, ep,
+                    verify_fn=_verify_on_trackers,
                 )
                 if cand["status"] in ("cached", "none", "too_recent"):
                     wl.set_precache_episode(imdb_id, season, ep, cand["status"])
@@ -704,7 +728,8 @@ async def api_precache(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
         raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
 
     cand = await availability.find_precache_candidate(
-        WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN
+        WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN,
+        verify_fn=_verify_on_trackers,
     )
     if cand["status"] == "cached":
         return {"status": "cached", "detail": "Déjà disponible en cache"}
@@ -858,14 +883,14 @@ async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
     débloqué, MediaFlow permet de télécharger depuis n'importe quel réseau
     (même principe qu'un partage manuel de lien MediaFlow).
 
-    Un badge ✅ ne veut PAS dire que VODIO a lui-même déclenché un
+    Un badge 🧲 ne veut PAS dire que VODIO a lui-même déclenché un
     pré-cache (`precache_magnet_id` peut être absent — cas courant : le
     titre était déjà caché ailleurs, trouvé directement par Wacustom, ou
     via un signal externe/un check AllDebrid ponctuel, cf.
     `_check_one_watchlist`). Si aucun magnet n'est encore suivi, on
     retrouve le meilleur candidat via find_precache_candidate (même
     logique que le bouton Précharger) et on le pousse sur AllDebrid —
-    quasi instantané si vraiment déjà caché (cohérent avec le badge ✅),
+    quasi instantané si vraiment déjà caché (cohérent avec le badge 🧲),
     sinon on prévient l'utilisateur plutôt que de bloquer la requête."""
     if not ALLDEBRID_API_KEY:
         raise HTTPException(status_code=503, detail="AllDebrid non configuré")
@@ -882,11 +907,12 @@ async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
         if not WACUSTOM_CONFIG:
             raise HTTPException(status_code=409, detail="Film pas encore pré-caché")
         cand = await availability.find_precache_candidate(
-            WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN
+            WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN,
+            verify_fn=_verify_on_trackers,
         )
         if cand["status"] not in ("cached", "candidate"):
             # Wacustom n'a plus aucune source pour ce film (cas du badge
-            # ✅⚡ obtenu uniquement via le "signal externe" Lumio, cf.
+            # 🧲⚡ obtenu uniquement via le "signal externe" Lumio, cf.
             # `_check_one_watchlist` — le badge reflète alors la
             # disponibilité en streaming Stremio, pas forcément un
             # candidat téléchargeable). Repli : Lumio a parfois déjà un
@@ -931,7 +957,7 @@ async def api_download(imdb_id: str, wl: Watchlist = Depends(resolve_session)):
         if result is None:
             raise HTTPException(status_code=502, detail="Échec AllDebrid sur toutes les sources candidates")
         if not result["ready"] and ddl_only:
-            # Badge ✅ basé sur une source DDL (non téléchargeable par ce
+            # Badge 🧲 basé sur une source DDL (non téléchargeable par ce
             # flux) ; aucun des candidats torrent tentés en repli n'est
             # finalement déjà en cache non plus — pas de vrai
             # téléchargement à lancer en douce pour un titre censé être
@@ -1011,7 +1037,7 @@ async def api_precache_season_status(imdb_id: str, season: int, wl: Watchlist = 
         async with sem:
             cand = await availability.find_precache_candidate(
                 WACUSTOM_URL, WACUSTOM_CONFIG, TMDB_API_KEY, entry, QUALITY_MIN,
-                season, int(ep), exclude_magnets=tried,
+                season, int(ep), exclude_magnets=tried, verify_fn=_verify_on_trackers,
             )
         if cand["status"] == "cached":
             wl.set_precache_episode(imdb_id, season, int(ep), "cached")

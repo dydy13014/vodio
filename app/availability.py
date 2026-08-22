@@ -2,15 +2,18 @@
 
 Pour chaque titre, interroge AIOStreams avec la config du compte dydy (prod) —
 il agrège TOUTES les sources (WAStream, StreamFusion, Frenchio, Wacustom…).
-Un titre est ✅ seulement si au moins une source **en cache instantané** (⚡)
-atteint la résolution minimale `min_res` (défaut 720p) ; sinon ⏳ (aucune
-source, ou uniquement du CAM/TS/basse qualité/non-caché sans résolution
-fiable). Les torrents non mis en cache (⏳) sont ignorés pour le calcul de la
-résolution : leur nom n'a jamais été vérifié par un téléchargement réel et
-peut mentir sur la qualité (ex. torrent annoncé "1080p BluRay" pour un film
-sorti au cinéma la semaine précédente — un vrai BluRay n'existe pas encore à
-ce stade). Les DDL sont quasi toujours en cache instantané (lien direct, pas
-de notion de cache) et ne sont donc pas pénalisés par cette règle.
+Un titre est 🧲 (dispo, téléchargeable) dès qu'au moins une source **en
+cache instantané** atteint la résolution minimale `min_res` (défaut 720p) ;
+⚡ s'ajoute en plus quand cette confirmation vient spécifiquement du cache
+mutualisé **Lumio** (signal le plus fiable — cf. `_is_lumio` plus bas) ;
+sinon ⏳ (aucune source, ou uniquement du CAM/TS/basse qualité/non-caché sans
+résolution fiable). Les torrents non mis en cache (⏳) sont ignorés pour le
+calcul de la résolution : leur nom n'a jamais été vérifié par un
+téléchargement réel et peut mentir sur la qualité (ex. torrent annoncé
+"1080p BluRay" pour un film sorti au cinéma la semaine précédente — un vrai
+BluRay n'existe pas encore à ce stade). Les DDL sont quasi toujours en cache
+instantané (lien direct, pas de notion de cache) et ne sont donc pas
+pénalisés par cette règle.
 En cas d'erreur (timeout, config invalide) le nom reste sans badge — inconnu
 n'est pas indisponible. Fan-out AIOStreams ~10-30 s : concurrence limitée à 3,
 uniquement au refresh quotidien.
@@ -19,6 +22,7 @@ import asyncio
 import datetime
 import logging
 import re
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -52,11 +56,24 @@ def stream_resolution(text: str) -> int:
     return 0
 
 
-_BADGE_RE = re.compile(r"^[✅⏳⚡]+\s*")
+_BADGE_RE = re.compile(r"^[✅⏳⚡🧲]+\s*")
 
 
 def _strip(name: str) -> str:
     return _BADGE_RE.sub("", name)
+
+
+def _badge_prefix(available: bool, is_lumio: bool = False) -> str:
+    """🧲 = dispo (téléchargeable) ; ⚡ s'ajoute en plus quand la confirmation
+    vient spécifiquement du cache mutualisé Lumio (jamais ⚡ seul — toujours
+    accompagné de 🧲, l'un n'exclut pas l'autre)."""
+    if not available:
+        return "⏳ "
+    return "🧲⚡ " if is_lumio else "🧲 "
+
+
+def _is_available_name(name: str) -> bool:
+    return name.startswith("🧲")
 
 
 _SIZE_RE = re.compile(r"([\d.,]+)\s*(GB|MB|TB)", re.IGNORECASE)
@@ -81,6 +98,25 @@ def _parse_size_gb(text: str) -> float | None:
     return num
 
 
+# Tags scène explicites pour une captation salle (caméra ou télésynchro),
+# jamais une vraie sortie WEB-DL/BluRay quelle que soit la résolution
+# annoncée dans le nom. Détecté directement plutôt que de compter sur le
+# délai `MIN_DAYS_FOR_ACTIVE_CHECK` : ce délai suppose une fenêtre VOD de
+# 45-90j, trop courte pour un blockbuster (cas réel 2026-08-22 — "Vaiana" et
+# "Spider-Man: Brand New Day", déjà >45j après leur sortie salle mais dont
+# les seules sources "cache=1080p" trouvées étaient explicitement taguées
+# CAM/HDTS dans leur nom de fichier — 2ᵉ occurrence du même piège que celui
+# qui avait justifié le délai le 2026-07-19).
+_CAM_RE = re.compile(
+    r"\b(CAM|HDCAM|CAMRip|TS|HDTS|TC|HDTC|TELESYNC|TELECINE|SCREENER|DVDSCR|SCR)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_cam(text: str) -> bool:
+    return bool(_CAM_RE.search(text))
+
+
 def _is_cached(text: str) -> bool:
     """Un flux ⚡ (cache instantané) a déjà été réellement téléchargé par
     quelqu'un — sa qualité annoncée est donc fiable. Un flux ⏳ (torrent non
@@ -91,8 +127,20 @@ def _is_cached(text: str) -> bool:
     base mutualisée (cf. module privé Wacustom, 2026-07-20) — traité comme
     cached même si Wacustom lui-même ne peut plus jamais afficher ⚡ pour un
     torrent depuis qu'AllDebrid a retiré son endpoint de vérification
-    instantanée (`/magnet/instant`, 404 depuis courant 2026)."""
+    instantanée (`/magnet/instant`, 404 depuis courant 2026). Un CAM/TS
+    explicitement tagué (cf. `_is_cam`) n'est JAMAIS considéré caché, même
+    marqué ⚡ — le cache confirme que le fichier existe, pas qu'il vaut la
+    peine d'être regardé."""
+    if _is_cam(text):
+        return False
     return "⚡" in text or "🌐 Lumio" in text
+
+
+def _is_lumio(text: str) -> bool:
+    """Contrairement à `_is_cached` (n'importe quelle confirmation de cache),
+    identifie spécifiquement une source Lumio — le signal le plus fiable
+    (base mutualisée vérifiée), affiché en plus du badge 🧲 générique."""
+    return "🌐 Lumio" in text
 
 
 async def _check_one(
@@ -113,12 +161,16 @@ async def _check_one(
             log.warning("check sources %s (%s) : %s", meta["id"], meta["name"], exc)
             return
         best = 0
+        lumio_ok = False
         for s in streams:
             name = s.get("name", "")
             text = f"{name} {s.get('description') or s.get('title') or ''}"
             if not _is_cached(text):
                 continue
-            best = max(best, stream_resolution(text))
+            res = stream_resolution(text)
+            best = max(best, res)
+            if res >= min_res and _is_lumio(text):
+                lumio_ok = True
         # Pas d'appel à la source externe ici, volontairement : ce chemin sert
         # au catalogue AlloCiné (dizaines de titres à chaque refresh), pour un
         # simple badge sur des films qu'on ne regarde pas forcément. Son quota
@@ -126,7 +178,7 @@ async def _check_one(
         # et correspond à ce que l'utilisateur attend vraiment (cf.
         # _check_one_watchlist).
         available = best >= min_res
-        meta["name"] = ("✅⚡ " if available else "⏳ ") + _strip(meta["name"])
+        meta["name"] = _badge_prefix(available, lumio_ok) + _strip(meta["name"])
         log.info(
             "%s %s : %d sources, meilleure réso %dp", meta["id"], meta["name"],
             len(streams), best,
@@ -148,14 +200,14 @@ async def add_availability_badges(
             *(_check_one(client, base, config, m, sem, min_res) for m in metas)
         )
         # Passage 2 : re-vérifie uniquement ceux qui ressortent indisponibles
-        # (un vrai indispo le restera ; un faux ⏳ dû au cache froid passe ✅).
-        pending = [m for m in metas if not m["name"].startswith("✅")]
+        # (un vrai indispo le restera ; un faux ⏳ dû au cache froid passe 🧲).
+        pending = [m for m in metas if not _is_available_name(m["name"])]
         if pending:
             await asyncio.sleep(RETRY_DELAY_S)
             await asyncio.gather(
                 *(_check_one(client, base, config, m, sem, min_res) for m in pending)
             )
-    available = sum(1 for m in metas if m["name"].startswith("✅"))
+    available = sum(1 for m in metas if _is_available_name(m["name"]))
     log.info("badges : %d/%d titres dispo en ≥%dp", available, len(metas), min_res)
 
 
@@ -191,10 +243,14 @@ def _is_zilean(text: str) -> bool:
     return bool(m) and m.group(1).lower() == "zilean"
 
 
-def _scan_streams(streams: list[dict], min_res: int, content_type: str = "movie") -> tuple[int, str | None, list[tuple]]:
+def _scan_streams(
+    streams: list[dict], min_res: int, content_type: str = "movie"
+) -> tuple[int, str | None, list[tuple], bool]:
     """Analyse les flux Wacustom d'un titre. Renvoie (meilleure résolution
     déjà en cache, magnet du meilleur flux TORRENT déjà en cache (ou None),
-    liste triée des candidats torrent non-cachés plausibles). Un candidat =
+    liste triée des candidats torrent non-cachés plausibles, si la
+    confirmation de cache atteignant `min_res` vient spécifiquement de
+    Lumio — sert au badge ⚡ additionnel, cf. `_badge_prefix`). Un candidat =
     (source Zilean ?, taille Go, résolution, lien magnet), trié non-Zilean
     d'abord puis du plus petit au plus gros dans chaque groupe. Le magnet du
     flux caché sert au téléchargement direct (VODIO n'a pas forcément
@@ -215,13 +271,26 @@ def _scan_streams(streams: list[dict], min_res: int, content_type: str = "movie"
     best_cached = 0
     best_cached_magnet = None
     best_cached_magnet_res = 0
+    best_cached_is_lumio = False
     candidates = []
     for s in streams:
         name = s.get("name", "")
         text = f"{name} {s.get('description') or s.get('title') or ''}"
+        # Zilean (recherche par hash DMM croisant des trackers publics tiers,
+        # sans vérif de contenu) exclu totalement, pas juste déprioritisé :
+        # faux positifs réels constatés le 2026-08-22 (deux torrents
+        # "Vaiana"/"Spider-Man" téléchargés via ce chemin, contenu réel
+        # complètement différent — mauvais hash associé au mauvais titre).
+        # Un score de confiance ne suffit pas à protéger le téléchargement
+        # automatique (`best_cached_magnet` ci-dessous) : mieux vaut l'exclure
+        # ici, à la source, plutôt que de compter sur un tri en aval.
+        if _is_zilean(text) or _is_cam(text):
+            continue
         res = stream_resolution(text)
         if _is_cached(text):
             best_cached = max(best_cached, res)
+            if res >= min_res and _is_lumio(text):
+                best_cached_is_lumio = True
             link = wacustom.extract_link(s.get("url", ""))
             if link and link.startswith("magnet:") and res > best_cached_magnet_res:
                 best_cached_magnet_res = res
@@ -234,15 +303,16 @@ def _scan_streams(streams: list[dict], min_res: int, content_type: str = "movie"
             continue
         link = wacustom.extract_link(s.get("url", ""))
         if link and link.startswith("magnet:"):
-            candidates.append((_is_zilean(text), size_gb if size_gb is not None else float("inf"), res, link))
-    candidates.sort(key=lambda c: (c[0], c[1]))
-    return best_cached, best_cached_magnet, candidates
+            candidates.append((size_gb if size_gb is not None else float("inf"), res, link))
+    candidates.sort(key=lambda c: c[0])
+    return best_cached, best_cached_magnet, candidates, best_cached_is_lumio
 
 
 async def find_precache_candidate(
     wacustom_base: str, wacustom_config: str, tmdb_api_key: str,
     meta: dict, min_res: int, season: int = 1, episode: int = 1,
     exclude_magnets: set[str] | None = None,
+    verify_fn: Callable[[str], Awaitable[bool]] | None = None,
 ) -> dict:
     """Pour le pré-cache à la demande : renvoie le meilleur candidat torrent
     à envoyer à AllDebrid pour un titre non-caché. {"status", "magnet"?, ...}.
@@ -259,7 +329,7 @@ async def find_precache_candidate(
     streams = await wacustom.get_streams(
         wacustom_base, wacustom_config, meta["id"], meta.get("type", "movie"), season, episode
     )
-    best_cached, best_cached_magnet, candidates = _scan_streams(streams, min_res, meta.get("type", "movie"))
+    best_cached, best_cached_magnet, candidates, _ = _scan_streams(streams, min_res, meta.get("type", "movie"))
     if best_cached >= min_res:
         result = {"status": "cached", "magnet": best_cached_magnet}
         if not best_cached_magnet and candidates:
@@ -268,25 +338,36 @@ async def find_precache_candidate(
             # plus petit peut être celui réellement en cache partagé AllDebrid
             # (cas réel : le plus petit candidat 720p pas caché, un 1080p plus
             # gros l'était).
-            result["fallback_magnets"] = [c[3] for c in candidates[:5]]
+            result["fallback_magnets"] = [c[2] for c in candidates[:5]]
         return result
     if exclude_magnets:
-        candidates = [c for c in candidates if c[3] not in exclude_magnets]
+        candidates = [c for c in candidates if c[2] not in exclude_magnets]
     if not candidates:
         return {"status": "none"}
 
     # Même garde-fou anti-CAM que le calcul des badges : ne pas précharger un
     # torrent d'un film trop récent (aucune vraie source WEB-DL/BluRay possible
-    # → ce serait un CAM déguisé, taille plausible mais contenu pourri).
+    # → ce serait un CAM déguisé, taille plausible mais contenu pourri). Même
+    # exemption "trackers vérifiés" que `_check_one_watchlist` (cf. son
+    # commentaire) : un titre ajouté manuellement mais réellement présent sur
+    # C411/Tr4ker/V3X n'a pas à attendre.
     days = _days_since_release(meta.get("release_date"))
     if days is None:
         days = _days_since_release(
             await tmdb.get_release_date(tmdb_api_key, meta["id"], meta.get("type", "movie"))
         )
+    is_series = meta.get("type") == "series"
     if days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK:
-        return {"status": "too_recent", "days": days}
+        verified = meta.get("source") == "c411"
+        if not verified and not is_series and verify_fn is not None:
+            try:
+                verified = await verify_fn(meta["id"])
+            except Exception:
+                log.exception("%s : échec vérification tracker live", meta["id"])
+        if not verified:
+            return {"status": "too_recent", "days": days}
 
-    _, size_gb, res, magnet = candidates[0]
+    size_gb, res, magnet = candidates[0]
     return {
         "status": "candidate", "magnet": magnet,
         "size_gb": round(size_gb, 2) if size_gb != float("inf") else None,
@@ -323,29 +404,69 @@ async def resolve_lumio_link(playback_url: str) -> dict | None:
     return await _extra_check.resolve_direct_link(playback_url)
 
 
+# Depuis le fix de `wacustom.extract_link` (2026-08-22), Wacustom renvoie à nouveau
+# ses dizaines de candidats bruts par tracker (Zilean à lui seul en fournit
+# souvent 15+ quasi identiques pour la même release) — une liste "Sources"
+# à choix manuel n'a aucun intérêt à en montrer autant, ça noie le choix
+# plutôt que de l'éclairer. On garde peu de candidats par (source,
+# résolution), et on remonte les caches confirmés en premier (dispo tout de
+# suite) avant la taille.
+_MAX_PER_BUCKET = 2
+_MAX_SOURCES_LISTED = 8
+
+# Nos propres trackers (clé API à nous, curation Unit3d) — à privilégier sur
+# les agrégateurs publics. Zilean (recherche par hash DMM croisant des
+# trackers publics tiers, sans vérif de contenu) est totalement EXCLU (pas
+# juste déprioritisé) — faux positifs confirmés en réel le 2026-08-22 : deux
+# torrents ("Vaiana", "Spider-Man: Brand New Day") dont le contenu réellement
+# téléchargé était un titre complètement différent (mauvais hash associé au
+# mauvais nom). Trop dangereux pour rester même en dernier choix. Filtré à la
+# source dans `_scan_streams` (badges + précache + DL auto) et ici.
+_TRUSTED_SOURCES = {"C411", "Tr4ker", "V3X"}
+
+# Plafond de résolution pour la liste "Sources" : au-delà, le fichier passe
+# par le relais MediaFlow (débit plafonné) —
+# un 2160p n'est ni téléchargeable ni lisible dans un temps raisonnable par
+# ce chemin. 1080p reste large pour ce plafond.
+_MAX_RES_LISTED = 1080
+
+
+def _source_rank(source: str) -> int:
+    if source in _TRUSTED_SOURCES:
+        return 0
+    return 1
+
+
 async def list_sources(wacustom_base: str, wacustom_config: str, meta: dict, min_res: int) -> list[dict]:
-    """Liste brute de toutes les sources trouvées par Wacustom pour un titre
-    (pas seulement la meilleure retenue par `find_precache_candidate`) — pour
-    un affichage détaillé façon Ludio, où l'utilisateur choisit lui-même la
+    """Liste des meilleures sources trouvées par Wacustom pour un titre (pas
+    forcément toutes — cf. `_MAX_PER_BUCKET`/`_MAX_SOURCES_LISTED` — ni
+    seulement la meilleure retenue par `find_precache_candidate`) — pour un
+    affichage détaillé façon Ludio, où l'utilisateur choisit lui-même la
     source à débrider plutôt que de laisser VODIO décider automatiquement.
     Chaque entrée : {"source", "title", "size_gb", "resolution", "cached",
     "link"} — `link` est un magnet ou une URL DDL selon la source."""
     streams = await wacustom.get_streams(
         wacustom_base, wacustom_config, meta["id"], meta.get("type", "movie")
     )
-    out = []
+    candidates = []
     for s in streams:
         name = s.get("name", "")
         title = s.get("description") or s.get("title") or ""
         text = f"{name} {title}"
+        if _is_zilean(text) or _is_cam(text):
+            continue
         link = wacustom.extract_link(s.get("url", ""))
-        if not link:
+        # Uniquement les magnets : seuls ceux-là ont un bouton DL côté page
+        # web (poussable directement vers AllDebrid) — un lien hébergeur
+        # (1Fichier, Alldebrid share...) n'offre que "Copier", jugé moins
+        # utile dans cette liste de choix rapide.
+        if not link or not link.startswith("magnet:"):
             continue
         res = stream_resolution(text)
-        if res < min_res:
+        if res < min_res or res > _MAX_RES_LISTED:
             continue
         m = _SOURCE_RE.search(text)
-        out.append({
+        candidates.append({
             "source": m.group(1) if m else "Wacustom",
             "title": title.strip()[:140] or name.strip()[:140],
             "size_gb": _parse_size_gb(text),
@@ -353,19 +474,40 @@ async def list_sources(wacustom_base: str, wacustom_config: str, meta: dict, min
             "cached": _is_cached(text),
             "link": link,
         })
-    out.sort(key=lambda c: c["size_gb"] if c["size_gb"] is not None else float("inf"))
-    return out
+
+    def sort_key(c: dict) -> tuple:
+        return (
+            not c["cached"],
+            _source_rank(c["source"]),
+            c["size_gb"] if c["size_gb"] is not None else float("inf"),
+        )
+
+    candidates.sort(key=sort_key)
+
+    buckets: dict[tuple, list[dict]] = {}
+    out = []
+    for c in candidates:
+        key = (c["source"], c["resolution"])
+        bucket = buckets.setdefault(key, [])
+        if len(bucket) >= _MAX_PER_BUCKET:
+            continue
+        bucket.append(c)
+        out.append(c)
+
+    out.sort(key=lambda c: (-c["resolution"], sort_key(c)))
+    return out[:_MAX_SOURCES_LISTED]
 
 
 async def _check_one_watchlist(
     wacustom_base: str, wacustom_config: str, alldebrid_api_key: str,
     tmdb_api_key: str, meta: dict, min_res: int,
+    verify_fn: Callable[[str], Awaitable[bool]] | None = None,
 ) -> None:
     streams = await wacustom.get_streams(
         wacustom_base, wacustom_config, meta["id"], meta.get("type", "movie")
     )
 
-    best_cached, _, candidates = _scan_streams(streams, min_res, meta.get("type", "movie"))
+    best_cached, _, candidates, best_cached_is_lumio = _scan_streams(streams, min_res, meta.get("type", "movie"))
 
     is_series = meta.get("type") == "series"
 
@@ -396,6 +538,24 @@ async def _check_one_watchlist(
     # titres du délai anti-CAM plutôt que de leur imposer la même prudence
     # qu'un titre sans aucun signal.
     from_verified_source = meta.get("source") == "c411"
+    # Un titre ajouté MANUELLEMENT (recherche watchlist) n'a jamais cette
+    # preuve statique — mais peut très bien exister sur C411/Tr4ker/V3X quand
+    # même (cas réel 2026-08-22 : "72 heures", ajouté via la recherche,
+    # bloqué "En attente ~12j" alors qu'une vraie release WEB-DL 1080p
+    # existait déjà sur Tr4ker). Un appel par film est acceptable ici — la
+    # watchlist est courte et cette vérification ne se déclenche que pour un
+    # film récent pas déjà exempté, jamais pour le catalogue bulk (cf.
+    # `c411_feed.search_by_imdb`, qui documente pourquoi un appel/film y
+    # serait dangereux).
+    would_be_too_recent = (
+        days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK and not from_verified_source
+    )
+    if would_be_too_recent and not is_series and verify_fn is not None:
+        try:
+            if await verify_fn(meta["id"]):
+                from_verified_source = True
+        except Exception:
+            log.exception("%s : échec vérification tracker live", meta["id"])
     too_recent = days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK and not from_verified_source
     too_recent_for_cached_signal = too_recent and not is_series
 
@@ -420,14 +580,19 @@ async def _check_one_watchlist(
     # même pour une série).
     if not available and candidates and not too_recent:
         checked_alldebrid = True
-        available = await alldebrid.is_cached(alldebrid_api_key, candidates[0][3])
+        available = await alldebrid.is_cached(alldebrid_api_key, candidates[0][2])
     elif not available and too_recent:
         log.info(
             "%s : check ignoré (sorti il y a %s j < %dj, CAM probable)",
             meta["id"], days, MIN_DAYS_FOR_ACTIVE_CHECK,
         )
 
-    meta["name"] = ("✅⚡ " if available else "⏳ ") + _strip(meta["name"])
+    # ⚡ additionnel si la confirmation vient de Lumio — via le scan Wacustom
+    # (best_cached_is_lumio) ou le signal externe direct (extra_hit, qui
+    # interroge littéralement Lumio) ; jamais via le check AllDebrid actif,
+    # qui n'a rien de spécifique à Lumio.
+    is_lumio = best_cached_is_lumio or extra_hit
+    meta["name"] = _badge_prefix(available, is_lumio) + _strip(meta["name"])
     # ETA affichée côté page web (« dispo estimée dans ~N j ») — seulement
     # pour un film indisponible à cause du garde-fou anti-CAM lui-même : pour
     # une série, un ⏳ ne veut pas dire "trop tôt" de la même façon (cf.
@@ -447,18 +612,22 @@ async def _check_one_watchlist(
 async def add_availability_badges_watchlist(
     wacustom_base: str, wacustom_config: str, alldebrid_api_key: str,
     tmdb_api_key: str, metas: list[dict], min_res: int = 720,
+    verify_fn: Callable[[str], Awaitable[bool]] | None = None,
 ) -> None:
     """Variante watchlist : interroge Wacustom directement (pas AIOStreams,
     qui tronque parfois les résultats — cf. JOURNAL) et vérifie activement
     via AllDebrid le meilleur candidat torrent non-caché trouvé (si le film
     est sorti depuis assez longtemps, cf. MIN_DAYS_FOR_ACTIVE_CHECK). Réservé
     à la watchlist (liste courte, choisie par l'utilisateur) pour ne pas
-    multiplier les appels à Wacustom/AllDebrid sur le catalogue quotidien."""
+    multiplier les appels à Wacustom/AllDebrid sur le catalogue quotidien.
+    `verify_fn(imdb_id) -> bool` (optionnel) : vérification live sur les
+    trackers Torznab pour lever le garde-fou anti-CAM sur un titre ajouté
+    manuellement mais réellement sorti (cf. `_check_one_watchlist`)."""
     if not alldebrid_api_key:
         log.warning("ALLDEBRID_API_KEY absente, check watchlist en mode passif uniquement")
     await asyncio.gather(*(
-        _check_one_watchlist(wacustom_base, wacustom_config, alldebrid_api_key, tmdb_api_key, m, min_res)
+        _check_one_watchlist(wacustom_base, wacustom_config, alldebrid_api_key, tmdb_api_key, m, min_res, verify_fn)
         for m in metas
     ))
-    available = sum(1 for m in metas if m["name"].startswith("✅"))
+    available = sum(1 for m in metas if _is_available_name(m["name"]))
     log.info("watchlist badges : %d/%d titres dispo en ≥%dp", available, len(metas), min_res)

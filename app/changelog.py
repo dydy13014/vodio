@@ -5,9 +5,28 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.11.0"
+VERSION = "0.13.0"
 
 CHANGELOG = [
+    {
+        "version": "0.13.0",
+        "date": "2026-08-22",
+        "changes": [
+            "Nouveaux badges de disponibilité : 🧲 (disponible), 🧲⚡ (disponible et confirmé par le cache mutualisé Lumio), ⏳ (indisponible) — visibles directement sur les cartes et la fiche détail",
+            "Détection directe des sources CAM/télésynchro (au lieu de se fier uniquement au délai après la sortie salle) : deux blockbusters récents étaient marqués à tort disponibles via ce type de source",
+            "Vérification en direct sur les trackers pour débloquer plus vite un titre ajouté manuellement à la liste, sans attendre le délai habituel",
+            "Correction : la liste « Sources » d'un film pouvait afficher jusqu'à 80+ résultats quasi identiques, ou aucun lien téléchargeable — nettoyée (8 sources max, uniquement celles avec un vrai bouton téléchargement, qualité plafonnée à 1080p, tracker le plus fiable en premier)",
+            "Correction : certaines sources renvoyaient un contenu sans rapport avec le titre demandé (mauvaise détection interne) — la source concernée est désormais exclue",
+        ],
+    },
+    {
+        "version": "0.12.0",
+        "date": "2026-08-21",
+        "changes": [
+            "Nouveau catalogue « Nouveautés Torrent », qui complète les Nouveautés VOD avec les documentaires et séries étrangères absents d'AlloCiné, sur plusieurs trackers",
+            "Un titre ajouté depuis ce catalogue est reconnu disponible plus rapidement (déjà vérifié à la source)",
+        ],
+    },
     {
         "version": "0.11.0",
         "date": "2026-08-15",

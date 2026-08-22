@@ -690,11 +690,13 @@ async function search() {
   }).join("");
 }
 
-async function add(tmdbId, mediaType, btn) {
+async function add(tmdbId, mediaType, btn, source) {
   const originalText = btn.textContent;
   btn.disabled = true; btn.textContent = "...";
+  const body = { tmdb_id: tmdbId, media_type: mediaType };
+  if (source) body.source = source;
   const r = await apiFetch(`${BASE}/api/watchlist`, {
-    method: "POST", body: JSON.stringify({ tmdb_id: tmdbId, media_type: mediaType })
+    method: "POST", body: JSON.stringify(body)
   });
   if (!r.ok) { toast("Erreur ajout"); btn.disabled = false; btn.textContent = originalText; return; }
   const { added } = await r.json();
@@ -842,16 +844,19 @@ function openCatalogDetailByIndex(which, i) {
    const m = which === 'search' ? _searchCache[i] : (which === 'c411' ? _c411Cache[i] : _cinemaCache[i]);
    if (!m) return;
    const type = which === 'cinema' ? 'movie' : (m.media_type || m.type || 'movie');
-   openCatalogDetail(m, type);
+   // "c411" seul fait foi de provenance (exempte le titre du garde-fou anti-CAM
+   // à l'ajout, cf. availability.py) — 'search'/'cinema' ne transmettent rien.
+   openCatalogDetail(m, type, which === 'c411' ? 'c411' : undefined);
 }
 
-function openCatalogDetail(m, type) {
+function openCatalogDetail(m, type, source) {
    _openDetailId = null;
    document.getElementById("modalHero").style.backgroundImage = m.poster ? `url('${m.poster}')` : 'none';
    document.getElementById("modalTitle").textContent = m.name || m.title;
    document.getElementById("modalMeta").innerHTML = `<span class="pill">${type === 'series' ? 'Série' : 'Film'}</span> <span class="pill">${m.year || m.releaseInfo || ''}</span>`;
    document.getElementById("modalDesc").textContent = m.overview || m.description || "";
-   document.getElementById("modalActions").innerHTML = `<button class="btn-primary" style="width:auto;" onclick="add(${m.tmdb_id}, '${type}', this)">+ Ajouter à ma liste</button>`;
+   const sourceArg = source ? `, '${source}'` : '';
+   document.getElementById("modalActions").innerHTML = `<button class="btn-primary" style="width:auto;" onclick="add(${m.tmdb_id}, '${type}', this${sourceArg})">+ Ajouter à ma liste</button>`;
    document.getElementById("modal-extra").innerHTML = '';
    document.getElementById("trailer-slot").innerHTML = "";
    loadTrailer(m.tmdb_id, type);

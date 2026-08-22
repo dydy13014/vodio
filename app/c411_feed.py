@@ -32,28 +32,33 @@ _MOVIE_CAT_PREFIX = "2"
 _TV_CAT_PREFIX = "5"
 
 
-async def fetch_latest(url: str, api_key: str, limit: int = 100) -> list[dict]:
-    """Derniers torrents ajoutés sur C411 (recherche Torznab avec `q` vide —
-    le tracker renvoie ses derniers ajouts triés par date, pas une recherche
-    par titre). `limit` est transmis à l'API (Torznab), pas juste appliqué
-    côté client : sans lui C411 ne renvoie que ses 25 résultats par défaut.
-    Toujours UNE SEULE requête quel que soit `limit` — c'est ce qui compte
-    pour rester sous le radar du rate-limit (le
-    piège de la tentative précédente était une requête PAR FILM, pas la
-    taille d'une requête unique). Constaté : C411 plafonne à 100 quoi qu'on
-    demande au-delà."""
+async def fetch_latest(url: str, api_key: str, limit: int = 100, name: str = "C411") -> list[dict]:
+    """Derniers torrents ajoutés sur un tracker Torznab (recherche avec `q`
+    vide — le tracker renvoie ses derniers ajouts triés par date, pas une
+    recherche par titre). Générique : marche à l'identique sur C411, Tr4ker,
+    V3X (même format Torznab constaté sur les trois — imdbid/tmdbid en
+    attribut, catégories Newznab standard). `limit` est transmis à l'API, pas
+    juste appliqué côté client : sans lui ces trackers ne renvoient qu'une
+    poignée de résultats par défaut (25 sur C411). Toujours UNE SEULE requête
+    quel que soit `limit` — c'est ce qui compte pour rester sous le radar du
+    rate-limit (le piège de la tentative précédente
+    était une requête PAR FILM, pas la taille d'une requête unique)."""
     params = {"t": "search", "q": "", "apikey": api_key, "limit": str(limit)}
     try:
-        async with httpx.AsyncClient(timeout=20) as client:
+        # follow_redirects=True : Tr4ker redirige systématiquement /api vers
+        # /api/ (301) — httpx ne suit pas les redirections par défaut, la
+        # requête échouerait toujours même quand le tracker est en ligne
+        # (même piège déjà rencontré et documenté côté Ludio/torznab.py).
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
             resp = await client.get(url, params=params)
             resp.raise_for_status()
     except httpx.HTTPError as exc:
-        log.warning("C411 injoignable : %s", exc)
+        log.warning("[%s] injoignable : %s", name, exc)
         return []
     try:
         root = ET.fromstring(resp.content)
     except ET.ParseError as exc:
-        log.warning("C411 : XML illisible (%s)", exc)
+        log.warning("[%s] XML illisible (%s)", name, exc)
         return []
 
     items = []

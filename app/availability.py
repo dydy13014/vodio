@@ -388,7 +388,15 @@ async def _check_one_watchlist(
         days = _days_since_release(
             await tmdb.get_release_date(tmdb_api_key, meta["id"], meta.get("type", "movie"))
         )
-    too_recent = days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK
+    # Un titre ajouté depuis le catalogue Nouveautés Torrent (C411) a déjà été
+    # filtré à l'ingestion sur un vrai tag de résolution dans le nom de la
+    # release (cf. c411_feed.filter_relevant) — contrairement à un titre
+    # AlloCiné/recherche manuelle, dont on n'a encore aucune preuve de source
+    # réelle. Choix explicite de l'utilisateur (2026-08-21) : exempter ces
+    # titres du délai anti-CAM plutôt que de leur imposer la même prudence
+    # qu'un titre sans aucun signal.
+    from_verified_source = meta.get("source") == "c411"
+    too_recent = days is not None and days < MIN_DAYS_FOR_ACTIVE_CHECK and not from_verified_source
     too_recent_for_cached_signal = too_recent and not is_series
 
     available = best_cached >= min_res and not too_recent_for_cached_signal

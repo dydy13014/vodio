@@ -46,10 +46,14 @@ ALLOCINE_PAGES = int(os.environ.get("ALLOCINE_PAGES", "3"))
 REFRESH_HOURS = int(os.environ.get("REFRESH_HOURS", "24"))
 DATA_FILE = Path(os.environ.get("DATA_FILE", "/app/data/catalog.json"))
 CINEMA_DATA_FILE = Path(os.environ.get("CINEMA_DATA_FILE", "/app/data/cinema.json"))
-# Nouveautés torrent C411 (docs/séries étrangères absents d'AlloCiné VOD) —
-# facultatif : source désactivée si les identifiants ne sont pas fournis.
+# Nouveautés torrent (docs/séries étrangères absents d'AlloCiné VOD) — un ou
+# plusieurs trackers Torznab, chacun facultatif indépendamment des autres.
 C411_URL = os.environ.get("C411_URL", "")
 C411_API_KEY = os.environ.get("C411_API_KEY", "")
+TR4KER_URL = os.environ.get("TR4KER_URL", "")
+TR4KER_API_KEY = os.environ.get("TR4KER_API_KEY", "")
+V3X_URL = os.environ.get("V3X_URL", "")
+V3X_API_KEY = os.environ.get("V3X_API_KEY", "")
 C411_DATA_FILE = Path(os.environ.get("C411_DATA_FILE", "/app/data/c411.json"))
 C411_LIMIT = int(os.environ.get("C411_LIMIT", "100"))
 WATCHLIST_FILE = os.environ.get("WATCHLIST_FILE", "/app/data/watchlist.json")
@@ -306,15 +310,27 @@ async def refresh_cinema() -> None:
 
 
 async def refresh_c411() -> None:
-    """Nouveautés torrent C411 — complète AlloCiné (docs/séries étrangères
-    absents de sa page VOD), filtré (audio FR, ≥QUALITY_MIN) et badgé via le
-    même mécanisme AIOStreams que le catalogue AlloCiné. Source facultative :
-    ne fait rien si C411_URL/C411_API_KEY ne sont pas configurés."""
-    if not C411_URL or not C411_API_KEY:
+    """Nouveautés torrent — complète AlloCiné (docs/séries étrangères absents
+    de sa page VOD), filtré (audio FR, ≥QUALITY_MIN) et badgé via le même
+    mécanisme AIOStreams que le catalogue AlloCiné. Interroge un ou plusieurs
+    trackers Torznab (C411, Tr4ker, V3X — même format chez les trois : une
+    seule requête par tracker et par refresh, jamais une par titre). Source
+    entièrement désactivée si aucun tracker n'est configuré."""
+    tracker_configs = [
+        ("C411", C411_URL, C411_API_KEY),
+        ("Tr4ker", TR4KER_URL, TR4KER_API_KEY),
+        ("V3X", V3X_URL, V3X_API_KEY),
+    ]
+    configured = [(name, url, key) for name, url, key in tracker_configs if url and key]
+    if not configured:
         return
-    items = await c411_feed.fetch_latest(C411_URL, C411_API_KEY, C411_LIMIT)
+    items: list[dict] = []
+    for name, url, key in configured:
+        tracker_items = await c411_feed.fetch_latest(url, key, C411_LIMIT, name=name)
+        log.info("Nouveautés Torrent [%s] : %d résultats bruts", name, len(tracker_items))
+        items.extend(tracker_items)
     if not items:
-        state_c411["last_error"] = "C411 : 0 résultat (tracker down ou clé invalide ?)"
+        state_c411["last_error"] = "Nouveautés Torrent : 0 résultat (trackers down ou clés invalides ?)"
         log.error(state_c411["last_error"])
         return
     relevant = c411_feed.filter_relevant(items, QUALITY_MIN)
@@ -659,6 +675,11 @@ async def api_add(payload: dict, wl: Watchlist = Depends(resolve_session)):
     meta = await tmdb.build_meta_from_tmdb(TMDB_API_KEY, int(tmdb_id), media_type)
     if not meta:
         raise HTTPException(status_code=404, detail="Titre introuvable ou sans ID IMDb")
+    # Provenance (ex. "c411") — exempte du garde-fou anti-CAM les titres déjà
+    # filtrés sur un vrai tag qualité à l'ingestion, cf. availability.py.
+    source = payload.get("source")
+    if source:
+        meta["source"] = source
     entry = wl.add(meta)  # stocké immédiatement, badge calculé après
     if entry is not None:
         asyncio.create_task(_badge_and_persist(wl, entry))

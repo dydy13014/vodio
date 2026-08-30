@@ -665,6 +665,10 @@ async def api_setup_fields():
         {"key": ck, "required": False, "secret": False, "label": label, "hint": hint, "recommended": rec}
         for ck, _url_key, _cfg_key, label, hint, rec in settings_store.COMPOSITE_FIELDS
     ]
+    fields += [
+        {"key": ck, "required": False, "secret": False, "label": label, "hint": hint, "recommended": rec}
+        for ck, _real_key, label, hint, rec in settings_store.SINGLE_MANIFEST_FIELDS
+    ]
     return {"fields": fields}
 
 
@@ -688,6 +692,8 @@ async def api_setup_current(_: None = Depends(_require_admin)):
     status = {key: bool(os.environ.get(key)) for key, *_rest in settings_store.FIELDS}
     for composite_key, _url_key, cfg_key, *_rest in settings_store.COMPOSITE_FIELDS:
         status[composite_key] = bool(os.environ.get(cfg_key))
+    for single_key, real_key, *_rest in settings_store.SINGLE_MANIFEST_FIELDS:
+        status[single_key] = bool(os.environ.get(real_key))
     return status
 
 
@@ -701,6 +707,13 @@ async def api_setup_save(payload: dict, authorization: str = Header(default=""))
             if parsed is None:
                 raise HTTPException(status_code=400, detail=f"URL de manifest invalide ({composite_key})")
             fields[url_key], fields[cfg_key] = parsed
+    for single_key, real_key, *_rest in settings_store.SINGLE_MANIFEST_FIELDS:
+        raw = fields.pop(single_key, None)
+        if raw:
+            parsed_id = settings_store.parse_lumio_manifest_url(raw)
+            if parsed_id is None:
+                raise HTTPException(status_code=400, detail=f"Manifest invalide ({single_key})")
+            fields[real_key] = parsed_id
     if SETUP_NEEDED:
         code = (payload.get("code") or "").strip()
         if not code or not hmac.compare_digest(code, settings_store.get_or_create_setup_code()):

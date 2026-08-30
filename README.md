@@ -20,6 +20,7 @@ Chaque titre est matché avec [TMDB](https://www.themoviedb.org/) pour récupér
 - **Bandes-annonces** — récupérées à la demande depuis TMDB, affichées sur la fiche d'un titre.
 - **Jaquettes avec note incrustée** *(optionnel)* — via [RPDB](https://ratingposterdb.com), en complément de TMDB.
 - **Précache et téléchargement direct** *(optionnel, nécessite Wacustom + AllDebrid)* — préchargez un film ou une saison entière d'un clic ; téléchargez un film disponible directement depuis la page web (relayé via MediaFlow-Proxy).
+- **Watchlist enrichie via Lumio** *(optionnel)* — signal complémentaire sur la watchlist perso pour confirmer plus vite qu'un titre est en cache.
 - **Notifications SMS** *(optionnel, Free Mobile)* — soyez prévenu quand un titre de votre liste devient disponible.
 - **PWA** — installable sur l'écran d'accueil du téléphone.
 - **Changelog intégré** — cliquer sur le numéro de version dans l'appli affiche les nouveautés.
@@ -80,6 +81,10 @@ Ces fonctions sont spécifiques à **Wacustom + AllDebrid** (`WACUSTOM_URL`, `WA
 ### Jaquettes RPDB
 
 Nécessite `RPDB_API_KEY` **et** `VODIO_BASE_URL` (l'URL publique de votre instance). Cette dernière est obligatoire pour cette fonctionnalité : les posters sont servis via un relais interne (`/poster/...`) qui a besoin de connaître sa propre URL publique — sans quoi la clé RPDB se retrouverait exposée en clair dans les catalogues Stremio (publics, sans authentification).
+
+### Watchlist enrichie (Lumio)
+
+`LUMIO_MANIFEST_ID` — signal complémentaire (cache mutualisé [mylumio.tv](https://mylumio.tv)) pour la **watchlist perso uniquement**. Confirme plus vite qu'un titre est déjà en cache, et sert de repli pour le téléchargement direct si Wacustom n'a plus de source exploitable. Volontairement absent du catalogue principal : son quota est trop bas pour vérifier des dizaines de titres à chaque refresh (il se bloque globalement, 24h, en cas de dépassement).
 
 ## Endpoints
 

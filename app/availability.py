@@ -26,11 +26,7 @@ from typing import Awaitable, Callable
 
 import httpx
 
-from . import alldebrid, tmdb, wacustom
-try:
-    from . import _private_cache_check as _extra_check
-except ImportError:
-    _extra_check = None
+from . import alldebrid, lumio, tmdb, wacustom
 
 log = logging.getLogger("vodio.availability")
 
@@ -380,28 +376,22 @@ async def find_lumio_direct_link(meta: dict) -> dict | None:
     ne renvoie aucun candidat exploitable : Lumio a parfois déjà un lien
     pré-résolu par leur propre infrastructure debrid (signal utilisé pour le
     badge ✅⚡, cf. `_check_one_watchlist`) même quand Wacustom lui-même n'a
-    plus aucune source — voir `_private_cache_check.get_direct_link`.
+    plus aucune source — voir `lumio.get_direct_link`.
     {"url", "filename"} ou None."""
-    if _extra_check is None:
-        return None
-    return await _extra_check.get_direct_link(meta["id"])
+    return await lumio.get_direct_link(meta["id"])
 
 
 async def find_lumio_candidates(meta: dict) -> list[dict]:
     """Variante de `find_lumio_direct_link` pour la liste « Sources » : liste
     plusieurs candidats Lumio sans les résoudre (0 appel supplémentaire),
     laissant l'utilisateur choisir lequel résoudre — voir
-    `_private_cache_check.list_candidates`."""
-    if _extra_check is None:
-        return []
-    return await _extra_check.list_candidates(meta["id"])
+    `lumio.list_candidates`."""
+    return await lumio.list_candidates(meta["id"])
 
 
 async def resolve_lumio_link(playback_url: str) -> dict | None:
     """Résout à la demande un candidat renvoyé par `find_lumio_candidates`."""
-    if _extra_check is None:
-        return None
-    return await _extra_check.resolve_direct_link(playback_url)
+    return await lumio.resolve_direct_link(playback_url)
 
 
 # Depuis le fix de `wacustom.extract_link` (2026-08-22), Wacustom renvoie à nouveau
@@ -565,9 +555,9 @@ async def _check_one_watchlist(
 
     # Signal externe (rapide, gratuit) avant de consommer un check AllDebrid
     # actif : si déjà confirmé caché ailleurs, inutile de vérifier nous-mêmes.
-    if not available and not too_recent_for_cached_signal and _extra_check is not None:
+    if not available and not too_recent_for_cached_signal:
         try:
-            extra_hit = await _extra_check.is_cached(meta["id"], meta.get("type", "movie"), 1 if is_series else None, 1 if is_series else None)
+            extra_hit = await lumio.is_cached(meta["id"], meta.get("type", "movie"), 1 if is_series else None, 1 if is_series else None)
         except Exception:
             pass
         available = available or extra_hit

@@ -127,6 +127,7 @@ function renderForm(containerId, currentState) {
     "Obligatoire": FIELDS.filter(f => f.required),
     "Badges de disponibilité (AIOStreams)": FIELDS.filter(f => ["STREAM_CHECK_MANIFEST","VODIO_QUALITY_MIN"].includes(f.key)),
     "Nouveautés Torrent (Torznab)": FIELDS.filter(f => ["C411_URL","C411_API_KEY","TR4KER_URL","TR4KER_API_KEY","V3X_URL","V3X_API_KEY"].includes(f.key)),
+    "Watchlist enrichie (Lumio)": FIELDS.filter(f => ["LUMIO_MANIFEST"].includes(f.key)),
     "Jaquettes RPDB": FIELDS.filter(f => ["RPDB_API_KEY","VODIO_BASE_URL"].includes(f.key)),
     "Multi-utilisateurs & SMS": FIELDS.filter(f => ["VODIO_EXTRA_USERS","VODIO_NOSMS_USERS","VODIO_SMS_USER","VODIO_SMS_PASS"].includes(f.key)),
     "Personnalisation": FIELDS.filter(f => ["VODIO_DEFAULT_NAME","ALLOCINE_PAGES","REFRESH_HOURS","VODIO_ADDON_ID","VODIO_ADDON_NAME"].includes(f.key)),

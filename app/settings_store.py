@@ -50,6 +50,7 @@ FIELDS: list[tuple[str, bool, bool, str, str, bool]] = [
     ("VODIO_ADDON_NAME", False, False, "Nom affiché dans la liste des addons Stremio", "Défaut : VODIO. À changer seulement pour renommer l'addon ou distinguer plusieurs instances", False),
     ("RPDB_API_KEY", False, True, "Clé API RPDB (jaquettes avec note)", "Clé gratuite sur ratingposterdb.com", False),
     ("VODIO_BASE_URL", False, False, "URL publique de cette instance", "requis pour RPDB — ex. https://votre-domaine.tld/vodio", False),
+    ("LUMIO_MANIFEST_ID", False, True, "Identifiant manifest Lumio", "Signal complémentaire pour la watchlist uniquement (quota trop bas pour le catalogue principal)", True),
 ]
 
 FIELD_KEYS = {f[0] for f in FIELDS}
@@ -70,10 +71,12 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # formulaire (2026-08-30, décision explicite) : fonctionnalité de niche,
 # trop de champs techniques pour un utilisateur non averti. Reste utilisable
 # via un vrai .env (cf. .env.example) pour qui sait ce qu'il fait.
+# LUMIO_MANIFEST_ID en plus : remplacé par un champ "coller l'URL" comme
+# AIOStreams (cf. SINGLE_MANIFEST_FIELDS), même logique de simplification.
 HIDDEN_FROM_FORM = {
     "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "VODIO_ADDON_ID",
     "WACUSTOM_URL", "WACUSTOM_CONFIG", "ALLDEBRID_API_KEY",
-    "MEDIAFLOW_URL", "MEDIAFLOW_API_PASSWORD",
+    "MEDIAFLOW_URL", "MEDIAFLOW_API_PASSWORD", "LUMIO_MANIFEST_ID",
 }
 
 # (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)
@@ -83,6 +86,34 @@ COMPOSITE_FIELDS: list[tuple[str, str, str, str, str, bool]] = [
      "Sur votre instance AIOStreams : ouvrez /stremio/configure, configurez vos sources/proxy, puis récupérez l'URL de manifest générée à la fin (bouton « Installer » ou lien copiable) — collez-la ici. Format : https://host/stremio/<uuid>/<config>/manifest.json",
      True),
 ]
+
+# Variante à une seule clé réelle (pas de base+config à séparer) : coller
+# l'URL du manifest Lumio (ou juste son identifiant), extrait automatiquement.
+# (clé pseudo, clé réelle, libellé, indice, recommandé)
+SINGLE_MANIFEST_FIELDS: list[tuple[str, str, str, str, bool]] = [
+    ("LUMIO_MANIFEST", "LUMIO_MANIFEST_ID", "Manifest Lumio",
+     "Signal complémentaire pour la watchlist perso uniquement (quota trop bas pour le catalogue principal) : collez l'URL de votre manifest Lumio (mylumio.tv) ou juste son identifiant",
+     True),
+]
+
+
+def parse_lumio_manifest_url(url: str) -> str | None:
+    """Extrait l'identifiant d'un manifest Lumio à partir de l'URL complète
+    (https://mylumio.tv/<id>/manifest.json) ou de l'identifiant seul déjà
+    collé tel quel."""
+    from urllib.parse import urlsplit
+
+    url = (url or "").strip()
+    if not url:
+        return None
+    if "/" not in url:
+        return url
+    parts = urlsplit(url)
+    path = parts.path if parts.scheme else url
+    path = path.strip("/")
+    if path.endswith("manifest.json"):
+        path = path[: -len("manifest.json")].strip("/")
+    return path or None
 
 
 def parse_manifest_url(url: str) -> tuple[str, str] | None:

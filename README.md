@@ -76,7 +76,7 @@ Sans ces variables, tous les films vont dans « Nouveautés VOD » sans badge de
 
 ### Précache et téléchargement
 
-Ces fonctions sont spécifiques à **Wacustom + AllDebrid** (`WACUSTOM_URL`, `WACUSTOM_CONFIG`, `ALLDEBRID_API_KEY`, `MEDIAFLOW_URL`, `MEDIAFLOW_API_PASSWORD`) — sans ces variables, la watchlist retombe sur le même check AIOStreams que ci-dessus et les boutons précache/téléchargement restent masqués, le reste de l'appli fonctionne normalement. Non exposées dans `/setup` (fonctionnalité de niche, réservée à `.env` pour qui sait ce qu'il fait).
+Ces fonctions sont spécifiques à **Wacustom + AllDebrid**. Depuis `/setup`, collez l'URL complète du manifest de votre compte Wacustom (page `/configure`) — décomposée automatiquement, comme pour AIOStreams. Via `.env`, les variables équivalentes : `WACUSTOM_URL`, `WACUSTOM_CONFIG`, `ALLDEBRID_API_KEY`, `MEDIAFLOW_URL`, `MEDIAFLOW_API_PASSWORD` — sans elles, la watchlist retombe sur le même check AIOStreams que ci-dessus et les boutons précache/téléchargement restent masqués, le reste de l'appli fonctionne normalement.
 
 ### Jaquettes RPDB
 

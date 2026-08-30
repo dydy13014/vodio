@@ -72,11 +72,11 @@ HIDDEN_FROM_FORM = {"STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "WACUSTOM_URL", "
 COMPOSITE_FIELDS: list[tuple[str, str, str, str, str, bool]] = [
     ("STREAM_CHECK_MANIFEST", "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG",
      "Manifest AIOStreams",
-     "Collez l'URL complète du manifest de votre compte AIOStreams (page /stremio/configure), ex. https://host/stremio/<uuid>/<config>/manifest.json",
+     "Sur votre instance AIOStreams : ouvrez /stremio/configure, configurez vos sources/proxy, puis récupérez l'URL de manifest générée à la fin (bouton « Installer » ou lien copiable) — collez-la ici. Format : https://host/stremio/<uuid>/<config>/manifest.json",
      True),
     ("WACUSTOM_MANIFEST", "WACUSTOM_URL", "WACUSTOM_CONFIG",
      "Manifest Wacustom",
-     "Collez l'URL complète de votre manifest Wacustom",
+     "Sur votre instance Wacustom : ouvrez /configure, configurez vos trackers/proxy, puis collez ici l'URL de manifest générée à la fin",
      True),
 ]
 

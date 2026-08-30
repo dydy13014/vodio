@@ -31,10 +31,12 @@ h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 0.3rem; }
 .card h2 { font-size: 1rem; margin: 0 0 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.3rem; }
 .hint { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
-input[type=text], input[type=password], input[type=number] {
+input[type=text], input[type=password], input[type=number], select {
   width: 100%; padding: 0.7rem 0.9rem; border-radius: 10px; border: 1px solid var(--border);
   background: rgba(255,255,255,0.03); color: var(--text); font-size: 0.95rem; margin-bottom: 1rem;
 }
+select { appearance: none; }
+select option { background: var(--surface); color: var(--text); }
 input:focus { outline: none; border-color: var(--accent); }
 .field.required label::after { content: " *"; color: var(--accent-2); }
 .badge-reco {
@@ -119,8 +121,30 @@ const BASE = "";
 let FIELDS = [];
 let editToken = null;
 
+// Paliers réellement reconnus par le code (availability.stream_resolution) —
+// pas de champ libre : une valeur hors de cette liste ne matcherait jamais
+// aucun flux, le badge resterait bloqué en ⏳ en permanence.
+const QUALITY_OPTIONS = [
+  ["0", "Aucun filtre (CAM/TS inclus)"],
+  ["480", "480p"],
+  ["720", "720p (recommandé — exclut CAM/TS)"],
+  ["1080", "1080p"],
+  ["1440", "1440p"],
+  ["2160", "2160p (4K)"],
+];
+
 function fieldHTML(f, currentlySet) {
-  const type = f.secret ? "password" : (/HOURS|PAGES|LIMIT|QUALITY_MIN/.test(f.key) ? "number" : "text");
+  if (f.key === "VODIO_QUALITY_MIN") {
+    return `<div class="field ${f.required ? 'required' : ''}">
+      <label>${f.label}</label>${f.recommended ? '<span class="badge-reco">Recommandé</span>' : ''}
+      ${f.hint ? `<span class="hint">${f.hint}</span>` : ""}
+      <select data-key="${f.key}">
+        <option value="">${currentlySet ? "(déjà configuré — garder l'actuel)" : "Défaut : 720p"}</option>
+        ${QUALITY_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join("")}
+      </select>
+    </div>`;
+  }
+  const type = f.secret ? "password" : (/HOURS|PAGES|LIMIT/.test(f.key) ? "number" : "text");
   const placeholder = currentlySet ? "(déjà configuré — laisser vide pour ne pas changer)" : "";
   return `<div class="field ${f.required ? 'required' : ''}">
     <label>${f.label}</label>${f.recommended ? '<span class="badge-reco">Recommandé</span>' : ''}
@@ -155,7 +179,7 @@ function renderForm(containerId, currentState) {
 
 function collectForm(containerId) {
   const out = {};
-  document.querySelectorAll(`#${containerId} input[data-key]`).forEach(el => {
+  document.querySelectorAll(`#${containerId} input[data-key], #${containerId} select[data-key]`).forEach(el => {
     if (el.value) out[el.dataset.key] = el.value;
   });
   return out;

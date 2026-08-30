@@ -656,10 +656,16 @@ async def api_setup_status():
 
 @app.get("/api/setup/fields")
 async def api_setup_fields():
-    return {"fields": [
+    fields = [
         {"key": k, "required": req, "secret": secret, "label": label, "hint": hint}
         for k, req, secret, label, hint in settings_store.FIELDS
-    ]}
+        if k not in settings_store.HIDDEN_FROM_FORM
+    ]
+    fields += [
+        {"key": ck, "required": False, "secret": False, "label": label, "hint": hint}
+        for ck, _url_key, _cfg_key, label, hint in settings_store.COMPOSITE_FIELDS
+    ]
+    return {"fields": fields}
 
 
 def _require_admin(authorization: str = Header(default="")) -> None:
@@ -679,12 +685,22 @@ async def api_setup_current(_: None = Depends(_require_admin)):
     """État actuel (booléen « défini ou non », jamais la valeur réelle d'un
     champ secret) — sert à pré-remplir le formulaire d'édition après le
     premier setup."""
-    return {key: bool(os.environ.get(key)) for key, *_rest in settings_store.FIELDS}
+    status = {key: bool(os.environ.get(key)) for key, *_rest in settings_store.FIELDS}
+    for composite_key, _url_key, cfg_key, *_rest in settings_store.COMPOSITE_FIELDS:
+        status[composite_key] = bool(os.environ.get(cfg_key))
+    return status
 
 
 @app.post("/api/setup")
 async def api_setup_save(payload: dict, authorization: str = Header(default="")):
-    fields = payload.get("fields") or {}
+    fields = dict(payload.get("fields") or {})
+    for composite_key, url_key, cfg_key, *_rest in settings_store.COMPOSITE_FIELDS:
+        raw = fields.pop(composite_key, None)
+        if raw:
+            parsed = settings_store.parse_manifest_url(raw)
+            if parsed is None:
+                raise HTTPException(status_code=400, detail=f"URL de manifest invalide ({composite_key})")
+            fields[url_key], fields[cfg_key] = parsed
     if SETUP_NEEDED:
         code = (payload.get("code") or "").strip()
         if not code or not hmac.compare_digest(code, settings_store.get_or_create_setup_code()):

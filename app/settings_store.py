@@ -51,6 +51,49 @@ FIELDS: list[tuple[str, bool, bool, str, str]] = [
 
 FIELD_KEYS = {f[0] for f in FIELDS}
 
+# STREAM_CHECK_URL/CONFIG et WACUSTOM_URL/CONFIG restent des champs à part
+# entière (FIELDS ci-dessus, pour is_configured()/l'état "défini") mais sont
+# masqués du formulaire /setup — remplacés par un champ composite unique :
+# coller l'URL complète du manifest Stremio (AIOStreams/Wacustom exposent
+# tous les deux le même format .../stremio/<uuid>/<config>/manifest.json),
+# décomposée automatiquement en (base, config) par `parse_manifest_url`.
+# Évite de demander à un utilisateur non technique de séparer lui-même
+# l'URL. Édition manuelle des deux champs toujours possible via un vrai
+# fichier .env (cf. .env.example) pour les cas avancés (ex. host Docker
+# interne différent de l'URL publique).
+HIDDEN_FROM_FORM = {"STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "WACUSTOM_URL", "WACUSTOM_CONFIG"}
+
+# (clé pseudo, clé URL réelle, clé config réelle, libellé, indice)
+COMPOSITE_FIELDS: list[tuple[str, str, str, str, str]] = [
+    ("STREAM_CHECK_MANIFEST", "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG",
+     "Manifest AIOStreams",
+     "Collez l'URL complète du manifest de votre compte AIOStreams (page /stremio/configure), ex. https://host/stremio/<uuid>/<config>/manifest.json"),
+    ("WACUSTOM_MANIFEST", "WACUSTOM_URL", "WACUSTOM_CONFIG",
+     "Manifest Wacustom",
+     "Collez l'URL complète de votre manifest Wacustom"),
+]
+
+
+def parse_manifest_url(url: str) -> tuple[str, str] | None:
+    """Découpe une URL de manifest Stremio (.../stremio/<uuid>/<config>/
+    manifest.json) en (base, config) pour STREAM_CHECK_URL/CONFIG ou
+    WACUSTOM_URL/CONFIG. None si l'URL n'a pas la forme attendue."""
+    from urllib.parse import urlsplit
+
+    url = (url or "").strip()
+    if not url:
+        return None
+    parts = urlsplit(url)
+    if not parts.scheme or not parts.netloc:
+        return None
+    base = f"{parts.scheme}://{parts.netloc}"
+    path = parts.path.strip("/")
+    if path.endswith("manifest.json"):
+        path = path[: -len("manifest.json")].strip("/")
+    if not path:
+        return None
+    return base, path
+
 
 def load() -> dict:
     if not SETTINGS_FILE.exists():

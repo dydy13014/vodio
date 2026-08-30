@@ -66,9 +66,9 @@ Dans les deux cas, les seules valeurs obligatoires sont `TMDB_API_KEY` et le mot
 
 ### Badges de disponibilité
 
-VODIO interroge votre AIOStreams pour savoir si un titre a des sources. Renseignez :
+VODIO interroge votre AIOStreams pour savoir si un titre a des sources. Depuis `/setup`, collez simplement l'URL complète du manifest de votre compte (page `/stremio/configure` d'AIOStreams) — elle est décomposée automatiquement. Via `.env`, les deux variables équivalentes :
 
-- `STREAM_CHECK_URL` — l'URL interne de votre AIOStreams (ex. `http://aiostreams:3000`)
+- `STREAM_CHECK_URL` — l'URL de votre AIOStreams (interne, ex. `http://aiostreams:3000`, ou publique)
 - `STREAM_CHECK_CONFIG` — le segment `stremio/<uuid>/<credentials>` visible dans l'URL de votre manifest AIOStreams
 
 Sans ces variables, tous les films vont dans « Nouveautés VOD » sans badge de disponibilité.

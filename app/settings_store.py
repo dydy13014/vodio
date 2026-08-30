@@ -66,17 +66,21 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # interne différent de l'URL publique).
 # VODIO_ADDON_ID en plus : généré automatiquement (cf. apply_to_environ),
 # rien à saisir dans l'immense majorité des cas.
-HIDDEN_FROM_FORM = {"STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "WACUSTOM_URL", "WACUSTOM_CONFIG", "VODIO_ADDON_ID"}
+# Précache/téléchargement (Wacustom+AllDebrid+MediaFlow) retirée du
+# formulaire (2026-08-30, décision explicite) : fonctionnalité de niche,
+# trop de champs techniques pour un utilisateur non averti. Reste utilisable
+# via un vrai .env (cf. .env.example) pour qui sait ce qu'il fait.
+HIDDEN_FROM_FORM = {
+    "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "VODIO_ADDON_ID",
+    "WACUSTOM_URL", "WACUSTOM_CONFIG", "ALLDEBRID_API_KEY",
+    "MEDIAFLOW_URL", "MEDIAFLOW_API_PASSWORD",
+}
 
 # (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)
 COMPOSITE_FIELDS: list[tuple[str, str, str, str, str, bool]] = [
     ("STREAM_CHECK_MANIFEST", "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG",
      "Manifest AIOStreams",
      "Sur votre instance AIOStreams : ouvrez /stremio/configure, configurez vos sources/proxy, puis récupérez l'URL de manifest générée à la fin (bouton « Installer » ou lien copiable) — collez-la ici. Format : https://host/stremio/<uuid>/<config>/manifest.json",
-     True),
-    ("WACUSTOM_MANIFEST", "WACUSTOM_URL", "WACUSTOM_CONFIG",
-     "Manifest Wacustom",
-     "Sur votre instance Wacustom : ouvrez /configure, configurez vos trackers/proxy, puis collez ici l'URL de manifest générée à la fin",
      True),
 ]
 

@@ -46,8 +46,8 @@ FIELDS: list[tuple[str, bool, bool, str, str, bool]] = [
     ("VODIO_NOSMS_USERS", False, False, "Utilisateurs exclus des SMS", "nom1,nom2", False),
     ("VODIO_SMS_USER", False, False, "Identifiant Free Mobile", "Votre identifiant Free Mobile (mobile.free.fr > Mes options > Notifications par SMS)", False),
     ("VODIO_SMS_PASS", False, True, "Clé API SMS Free Mobile", "Clé générée en activant l'option « Notifications par SMS » sur mobile.free.fr", False),
-    ("VODIO_ADDON_ID", False, False, "ID de l'addon Stremio", "ex. org.monpseudo.vodio", False),
-    ("VODIO_ADDON_NAME", False, False, "Nom de l'addon Stremio", "Défaut : VODIO", False),
+    ("VODIO_ADDON_ID", False, False, "Identifiant technique de l'addon", "À laisser vide dans la quasi totalité des cas. Utile seulement si vous installez plusieurs instances de VODIO (ex. une pour vous, une pour un ami) : donnez à chacune un ID différent pour éviter que Stremio les confonde. Défaut : org.selfhosted.vodio, ex. perso : org.monpseudo.vodio", False),
+    ("VODIO_ADDON_NAME", False, False, "Nom affiché dans la liste des addons Stremio", "Défaut : VODIO. À changer seulement pour renommer l'addon ou distinguer plusieurs instances", False),
     ("RPDB_API_KEY", False, True, "Clé API RPDB (jaquettes avec note)", "Clé gratuite sur ratingposterdb.com", False),
     ("VODIO_BASE_URL", False, False, "URL publique de cette instance", "requis pour RPDB — ex. https://votre-domaine.tld/vodio", False),
 ]

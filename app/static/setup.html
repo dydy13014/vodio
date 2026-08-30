@@ -21,7 +21,9 @@ body {
 }
 .wrap { width: 100%; max-width: 640px; }
 h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 0.3rem; }
-.sub { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+.sub { color: var(--muted); margin-bottom: 0.5rem; font-size: 0.95rem; }
+.legend { color: var(--muted); margin-bottom: 2rem; font-size: 0.82rem; }
+.legend .star { color: var(--accent-2); font-weight: 800; }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 1.5rem; margin-bottom: 1.5rem;
@@ -51,6 +53,7 @@ a { color: var(--accent-2); }
 <div class="wrap">
   <h1>⚙️ VODIO — Configuration</h1>
   <p class="sub" id="subtitle">Chargement…</p>
+  <p class="legend"><span class="star">*</span> champ obligatoire — tout le reste est optionnel et peut rester vide, la fonctionnalité correspondante sera simplement désactivée.</p>
 
   <!-- Écran 1 : instance pas encore configurée -->
   <div id="setup-screen" class="hidden">

@@ -5,9 +5,29 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.13.0"
+VERSION = "0.15.0"
 
 CHANGELOG = [
+    {
+        "version": "0.15.0",
+        "date": "2026-08-30",
+        "changes": [
+            "Correction : la clé de l'API de jaquettes (RPDB) apparaissait en clair dans les URLs de poster des catalogues Stremio (publics) — les images passent désormais par un relais interne qui ne l'expose plus",
+            "Correctifs internes suite à une revue de code (garde-fou anti-CAM non contournable via l'API, vérification manquante sur un endpoint de résolution Lumio, quelques cas de plantage évités)",
+            "Bandeau héros repensé : prend toute la largeur, s'ouvre au clic n'importe où dessus, flèches précédent/suivant en plus des points",
+            "Vignette d'affiche (portrait, non recadrée) ajoutée sur le bandeau et la fiche détail, en complément de l'image large",
+            "Fiche détail (modal) : utilise l'image large du film quand elle existe, au lieu de forcer l'affiche dans un cadre large où elle n'était visible que recadrée en son centre",
+            "Le bandeau héros affiche maintenant au moins 10 films récents, en priorité ceux confirmés disponibles (Nouveautés Torrent puis Nouveautés VOD croisés avec la vraie disponibilité), au lieu de se limiter aux 3-4 titres du catalogue Nouveautés Torrent",
+            "Compteurs « films vus » / « en attente » réduits et déplacés à côté du titre « Ma Liste Récemment Ajoutée »",
+        ],
+    },
+    {
+        "version": "0.14.0",
+        "date": "2026-08-26",
+        "changes": [
+            "Meilleures jaquettes sur les fiches (nouvelle source d'images RPDB, en complément de TMDB)",
+        ],
+    },
     {
         "version": "0.13.0",
         "date": "2026-08-22",

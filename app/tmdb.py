@@ -7,6 +7,7 @@ fournissent les métadonnées et AIOStreams trouve les sources.
 """
 import datetime
 import logging
+import os
 
 import httpx
 
@@ -15,6 +16,39 @@ log = logging.getLogger("vodio.tmdb")
 API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p/w500"
 BACKDROP = "https://image.tmdb.org/t/p/w1280"
+
+RPDB_API_KEY = os.environ.get("RPDB_API_KEY", "")
+VODIO_BASE_URL = os.environ.get("VODIO_BASE_URL", "")
+
+
+def rpdb_poster(fallback: str | None, *, imdb_id: str | None = None, tmdb_id: int | None = None) -> str | None:
+    """Reecrit l'URL de poster vers un proxy local qui sert l'image RPDB (note
+    incrustee sur la jaquette) si une cle est configuree ; sinon retombe sur
+    le poster TMDB brut. La cle RPDB ne doit jamais apparaitre dans une URL
+    servie aux clients : les catalogues Stremio sont publics (sans auth),
+    donc toute cle inseree directement dans l'URL de poster serait exposee a
+    n'importe qui appelant ces routes. Necessite VODIO_BASE_URL (URL publique
+    de cette instance) pour construire le proxy ; sans elle, retombe sur le
+    poster TMDB brut meme si une cle RPDB est configuree."""
+    if not RPDB_API_KEY or not VODIO_BASE_URL:
+        return fallback
+    if imdb_id:
+        return f"{VODIO_BASE_URL}/poster/imdb/{imdb_id}.jpg"
+    if tmdb_id:
+        return f"{VODIO_BASE_URL}/poster/tmdb/{tmdb_id}.jpg"
+    return fallback
+
+
+def rpdb_direct_url(*, imdb_id: str | None = None, tmdb_id: int | None = None) -> str | None:
+    """URL RPDB reelle (avec la cle), a usage interne serveur uniquement —
+    consommee par la route proxy /poster/... , jamais renvoyee a un client."""
+    if not RPDB_API_KEY:
+        return None
+    if imdb_id:
+        return f"https://api.ratingposterdb.com/{RPDB_API_KEY}/imdb/poster-default/{imdb_id}.jpg?fallback=true"
+    if tmdb_id:
+        return f"https://api.ratingposterdb.com/{RPDB_API_KEY}/tmdb/poster-default/{tmdb_id}.jpg?fallback=true"
+    return None
 
 
 async def get_trending(api_key: str, window: str = "day") -> list[dict]:
@@ -40,7 +74,7 @@ async def get_trending(api_key: str, window: str = "day") -> list[dict]:
             "name": r.get("title", ""),
             "overview": r.get("overview", ""),
             "backdrop": BACKDROP + r["backdrop_path"],
-            "poster": IMG + r["poster_path"] if r.get("poster_path") else None,
+            "poster": rpdb_poster(IMG + r["poster_path"] if r.get("poster_path") else None, tmdb_id=r["id"]),
             "year": (r.get("release_date") or "")[:4],
         })
     return results
@@ -79,7 +113,7 @@ async def get_digital_releases(api_key: str) -> list[dict]:
             "media_type": "movie",
             "name": r.get("title", ""),
             "overview": r.get("overview", ""),
-            "poster": IMG + r["poster_path"],
+            "poster": rpdb_poster(IMG + r["poster_path"], tmdb_id=r["id"]),
             "backdrop": BACKDROP + r["backdrop_path"] if r.get("backdrop_path") else None,
             "year": (r.get("release_date") or "")[:4],
         })
@@ -136,7 +170,9 @@ async def match_film(client: httpx.AsyncClient, api_key: str, film: dict) -> dic
         "description": film.get("synopsis", ""),
     }
     if result.get("poster_path"):
-        meta["poster"] = IMG + result["poster_path"]
+        meta["poster"] = rpdb_poster(IMG + result["poster_path"], imdb_id=imdb_id, tmdb_id=tmdb_id)
+    if result.get("backdrop_path"):
+        meta["backdrop"] = BACKDROP + result["backdrop_path"]
     if result.get("release_date"):
         meta["releaseInfo"] = result["release_date"][:4]
     # Date de sortie exacte scrapée (agenda cinéma) — plus précise que l'année
@@ -180,7 +216,7 @@ async def search_titles(api_key: str, query: str) -> list[dict]:
             "media_type": "movie" if mt == "movie" else "series",
             "name": r.get("title") or r.get("name") or r.get("original_title") or r.get("original_name", ""),
             "year": (date or "")[:4],
-            "poster": IMG + r["poster_path"] if r.get("poster_path") else None,
+            "poster": rpdb_poster(IMG + r["poster_path"] if r.get("poster_path") else None, tmdb_id=r["id"]),
             "overview": r.get("overview", ""),
         })
     # Correspondances exactes du titre d'abord (évite d'enterrer un classique
@@ -224,7 +260,9 @@ async def build_meta_from_tmdb(
         "description": d.get("overview", ""),
     }
     if d.get("poster_path"):
-        meta["poster"] = IMG + d["poster_path"]
+        meta["poster"] = rpdb_poster(IMG + d["poster_path"], imdb_id=imdb_id, tmdb_id=tmdb_id)
+    if d.get("backdrop_path"):
+        meta["backdrop"] = BACKDROP + d["backdrop_path"]
     if date:
         meta["releaseInfo"] = date[:4]
         meta["release_date"] = date
@@ -274,7 +312,9 @@ async def build_meta_from_external(
         "description": r.get("overview", ""),
     }
     if r.get("poster_path"):
-        meta["poster"] = IMG + r["poster_path"]
+        meta["poster"] = rpdb_poster(IMG + r["poster_path"], imdb_id=imdb_id, tmdb_id=r["id"])
+    if r.get("backdrop_path"):
+        meta["backdrop"] = BACKDROP + r["backdrop_path"]
     date = r.get("release_date") or r.get("first_air_date")
     if date:
         meta["releaseInfo"] = date[:4]

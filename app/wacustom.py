@@ -35,7 +35,7 @@ async def get_streams(
             resp = await client.get(f"{base}/{config}/{path}")
             resp.raise_for_status()
             return resp.json().get("streams", [])
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, ValueError, AttributeError) as exc:
         log.warning("requête directe Wacustom échouée (%s) : %s", imdb_id, exc)
         return []
 

@@ -32,8 +32,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from . import alldebrid, availability, c411_feed, changelog, cinema_scraper, notify, scraper, tmdb
 from .watchlist import Watchlist
@@ -63,7 +64,7 @@ VODIO_PASSWORD = os.environ.get("VODIO_PASSWORD", "")
 # compte (comportement historique conservé si la variable n'est pas définie).
 VODIO_DEFAULT_NAME = os.environ.get("VODIO_DEFAULT_NAME", "")
 STATIC_DIR = Path(__file__).parent / "static"
-# Badges 🧲/⏳ via AIOStreams (config compte dydy) — désactivés si CONFIG absent
+# Badges 🧲/⏳ via AIOStreams (config d'un compte de référence) — désactivés si CONFIG absent
 STREAM_CHECK_URL = os.environ.get("STREAM_CHECK_URL", "http://aiostreams:3000")
 STREAM_CHECK_CONFIG = os.environ.get("STREAM_CHECK_CONFIG", "")
 # Résolution minimale pour un badge 🧲 (sinon ⏳). 720 = exclut CAM/TS/sans réso.
@@ -77,13 +78,13 @@ ALLDEBRID_API_KEY = os.environ.get("ALLDEBRID_API_KEY", "")
 # Téléchargement direct (films pré-cachés) : lien AllDebrid relayé via MediaFlow
 # pour fonctionner depuis n'importe quel réseau (un lien AllDebrid brut est lié
 # à l'IP qui l'a débloqué — cf. workflow "partager un lien" déjà en place).
-MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "https://mediaflow.example.org/mf")
+MEDIAFLOW_URL = os.environ.get("MEDIAFLOW_URL", "")
 MEDIAFLOW_API_PASSWORD = os.environ.get("MEDIAFLOW_API_PASSWORD", "")
 
 MANIFEST = {
     # Personnalisable par instance : changer l'id évite les collisions si un
     # utilisateur installe plusieurs instances VODIO. Défaut = instance d'origine.
-    "id": os.environ.get("VODIO_ADDON_ID", "org.eddy.vodio"),
+    "id": os.environ.get("VODIO_ADDON_ID", "org.selfhosted.vodio"),
     "version": "1.5.0",
     "name": os.environ.get("VODIO_ADDON_NAME", "VODIO"),
     "description": "Nouveautés VOD françaises (AlloCiné) + ma liste perso (films & séries)",
@@ -562,6 +563,30 @@ async def manifest_route():
     return JSONResponse(MANIFEST, headers=CORS)
 
 
+@app.get("/poster/{kind}/{ident}.jpg")
+async def poster_proxy(kind: str, ident: str):
+    """Sert l'image RPDB sans jamais exposer la cle au client — les
+    catalogues Stremio (qui referencent ces URLs) sont publics."""
+    if kind == "imdb":
+        url = tmdb.rpdb_direct_url(imdb_id=ident)
+    elif kind == "tmdb":
+        try:
+            url = tmdb.rpdb_direct_url(tmdb_id=int(ident))
+        except ValueError:
+            raise HTTPException(status_code=404)
+    else:
+        raise HTTPException(status_code=404)
+    if url is None:
+        raise HTTPException(status_code=404)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(url, follow_redirects=True)
+            r.raise_for_status()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="poster indisponible")
+    return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"))
+
+
 @app.get("/catalog/movie/vodio-new.json")
 async def catalog_new():
     metas = [_clean_name(m) for m in state["metas"]]
@@ -696,13 +721,20 @@ async def api_add(payload: dict, wl: Watchlist = Depends(resolve_session)):
     media_type = payload.get("media_type", "movie")
     if not tmdb_id:
         raise HTTPException(status_code=400, detail="tmdb_id requis")
-    meta = await tmdb.build_meta_from_tmdb(TMDB_API_KEY, int(tmdb_id), media_type)
+    try:
+        tmdb_id = int(tmdb_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="tmdb_id invalide")
+    meta = await tmdb.build_meta_from_tmdb(TMDB_API_KEY, tmdb_id, media_type)
     if not meta:
         raise HTTPException(status_code=404, detail="Titre introuvable ou sans ID IMDb")
     # Provenance (ex. "c411") — exempte du garde-fou anti-CAM les titres déjà
     # filtrés sur un vrai tag qualité à l'ingestion, cf. availability.py.
+    # Revérifié ici (pas seulement lu depuis le payload) : le client ne doit
+    # pas pouvoir forger cette exemption pour un titre non réellement issu du
+    # catalogue C411.
     source = payload.get("source")
-    if source:
+    if source == "c411" and any(m["id"] == meta["id"] for m in state_c411["metas"]):
         meta["source"] = source
     entry = wl.add(meta)  # stocké immédiatement, badge calculé après
     if entry is not None:
@@ -828,6 +860,9 @@ async def api_resolve_lumio(imdb_id: str, payload: dict, wl: Watchlist = Depends
     appel Lumio, seulement pour l'entrée choisie par l'utilisateur)."""
     if not MEDIAFLOW_API_PASSWORD:
         raise HTTPException(status_code=503, detail="MediaFlow non configuré")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
     playback_url = (payload.get("playback_url") or "").strip()
     filename = payload.get("filename") or "video.mkv"
     resolved = await availability.resolve_lumio_link(playback_url)

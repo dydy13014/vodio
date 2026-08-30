@@ -119,8 +119,8 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
   backdrop-filter: blur(10px); transition: transform 0.2s, border-color 0.2s;
 }
 .bento-card:hover { border-color: rgba(255,255,255,0.2); transform: translateY(-2px); }
-.bento-card.hero-card { grid-column: span 2; grid-row: span 2; padding: 0; border: none; background: transparent;}
-.bento-card.stat-card { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 0.5rem;}
+.bento-card.hero-card { grid-column: span 4; grid-row: span 2; padding: 0; border: none; background: transparent; cursor: pointer; overflow: visible;}
+.hero-visual { position: absolute; inset: 0; border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
 .bento-card.list-card { grid-column: span 4; min-height: 300px; }
 
 /* Hero Card Specifics */
@@ -130,18 +130,27 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
 .hero-title { font-size: 2.5rem; font-weight: 800; line-height: 1.1; margin-bottom: 0.5rem; text-shadow: 0 2px 10px rgba(0,0,0,0.5);}
 .hero-meta { display: flex; gap: 1rem; color: #ddd; font-size: 0.9rem; margin-bottom: 1rem; align-items: center;}
 .pill { padding: 0.2rem 0.6rem; border-radius: 6px; background: rgba(255,255,255,0.15); backdrop-filter: blur(4px); font-size: 0.8rem; font-weight: 600;}
-.hero-dots { position: absolute; bottom: 2rem; right: 2rem; display: flex; gap: 0.5rem; z-index: 2;}
+.hero-dots { position: absolute; bottom: 2rem; right: 2rem; display: flex; gap: 0.5rem; z-index: 2; max-width: 60%; flex-wrap: wrap; justify-content: flex-end;}
 .hero-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.3); cursor: pointer; transition: all 0.2s;}
 .hero-dot.active { background: var(--accent); width: 24px; border-radius: 4px; }
 
-/* Stat Cards */
-.stat-number { font-size: 3.5rem; font-weight: 800; line-height: 1; background: linear-gradient(135deg, #fff, #aaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;}
-.stat-label { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.85rem;}
-.stat-card.accent .stat-number { background: linear-gradient(135deg, var(--accent-2), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;}
+.hero-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); border: none; color: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
+.hero-arrow:hover { background: rgba(0,0,0,0.7); }
+.hero-arrow.prev { left: -1.4rem; }
+.hero-arrow.next { right: -1.4rem; }
+
+.hero-poster { position: absolute; top: 1.5rem; left: 1.5rem; width: 100px; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background-size: cover; background-position: center; background-color: var(--surface-solid); box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 2; border: 1px solid rgba(255,255,255,0.15); display: none;}
+@media (max-width: 768px) { .hero-poster { display: none !important; } }
+
+/* Mini Stats (à côté du titre de la liste) */
+.mini-stats { display: flex; gap: 0.8rem; margin-left: 1rem; }
+.mini-stat { font-size: 0.85rem; color: var(--muted); font-weight: 500; }
+.mini-stat b { color: var(--text); font-weight: 800; }
+.mini-stat.accent b { color: var(--accent); }
 
 /* List Card (Watchlist Horizontal) */
-.list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.list-title { font-size: 1.2rem; font-weight: 700; }
+.list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+.list-title { font-size: 1.2rem; font-weight: 700; display: flex; align-items: baseline; }
 .horizontal-scroll { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 .horizontal-scroll::-webkit-scrollbar { height: 6px; }
 .horizontal-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
@@ -170,6 +179,7 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
 @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(20px); } }
 .modal-hero { height: 300px; background-size: cover; background-position: center; position: relative; }
 .modal-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, var(--surface-solid) 0%, transparent 100%); }
+.modal-poster { position: absolute; z-index: 2; left: 1.5rem; bottom: 1rem; width: 80px; aspect-ratio: 2/3; border-radius: 8px; overflow: hidden; background-size: cover; background-position: center; background-color: var(--surface-solid); box-shadow: 0 4px 14px rgba(0,0,0,0.5); border: 1px solid var(--border); display: none;}
 .close-modal { position: absolute; top: 1rem; right: 1rem; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; display: grid; place-items: center; cursor: pointer; z-index: 10; backdrop-filter: blur(4px);}
 .close-modal:hover { background: var(--accent); }
 .modal-body { padding: 0 2rem 2rem; margin-top: -60px; position: relative; z-index: 2; }
@@ -229,7 +239,7 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
   .mobile-brand { display: block; }
   .main-content { padding: 1.5rem; }
   .bento-grid { grid-template-columns: 1fr; gap: 1rem; }
-  .bento-card.hero-card, .bento-card.stat-card, .bento-card.list-card { grid-column: span 1; grid-row: span 1; min-height: 200px;}
+  .bento-card.hero-card, .bento-card.list-card { grid-column: span 1; grid-row: span 1; min-height: 200px;}
   .hero-title { font-size: 1.8rem; }
 
   /* Bottom Nav Pill */
@@ -293,32 +303,33 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
     <div id="tab-mine">
       <div class="bento-grid">
         <!-- Hero Card -->
-        <div class="bento-card hero-card" id="hero-card">
-          <div class="hero-bg" id="hero-bg"></div>
-          <div class="hero-overlay"></div>
-          <div class="hero-content-inner">
-            <div class="hero-meta" id="hero-meta"><span class="pill">🔥 Tendance</span></div>
-            <h1 class="hero-title" id="hero-title">Chargement...</h1>
-            <p id="hero-sub" style="color:#ccc; margin-bottom:1.5rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">...</p>
-            <button class="btn-primary" style="width:auto; padding:0.8rem 1.5rem;" id="hero-add">+ Ajouter à ma liste</button>
+        <div class="bento-card hero-card" id="hero-card" onclick="openHeroDetail()">
+          <div class="hero-visual">
+            <div class="hero-bg" id="hero-bg"></div>
+            <div class="hero-overlay"></div>
+            <div class="hero-poster" id="hero-poster"></div>
+            <div class="hero-content-inner">
+              <div class="hero-meta" id="hero-meta"><span class="pill">🔥 Tendance</span></div>
+              <h1 class="hero-title" id="hero-title">Chargement...</h1>
+              <p id="hero-sub" style="color:#ccc; margin-bottom:1.5rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">...</p>
+              <button class="btn-primary" style="width:auto; padding:0.8rem 1.5rem;" id="hero-add">+ Ajouter à ma liste</button>
+            </div>
+            <div class="hero-dots" id="hero-dots"></div>
           </div>
-          <div class="hero-dots" id="hero-dots"></div>
-        </div>
-
-        <!-- Stat Cards -->
-        <div class="bento-card stat-card">
-          <div class="stat-number" id="stat-watched">0</div>
-          <div class="stat-label">Films Vus</div>
-        </div>
-        <div class="bento-card stat-card accent">
-          <div class="stat-number" id="stat-pending">0</div>
-          <div class="stat-label">En Attente</div>
+          <button class="hero-arrow prev" onclick="event.stopPropagation(); heroPrev()" aria-label="Film précédent">‹</button>
+          <button class="hero-arrow next" onclick="event.stopPropagation(); heroNext()" aria-label="Film suivant">›</button>
         </div>
 
         <!-- Watchlist Horizontal -->
         <div class="bento-card list-card">
           <div class="list-header">
-            <div class="list-title">Ma Liste Récemment Ajoutée</div>
+            <div class="list-title">
+              Ma Liste Récemment Ajoutée
+              <span class="mini-stats">
+                <span class="mini-stat"><b id="stat-watched">0</b> vus</span>
+                <span class="mini-stat accent"><b id="stat-pending">0</b> en attente</span>
+              </span>
+            </div>
             <button class="btn-ghost" style="padding:0.4rem 0.8rem; font-size:0.8rem;" onclick="switchTab('mine-full')">Voir tout</button>
           </div>
           <div class="horizontal-scroll" id="watchlist-preview">
@@ -380,7 +391,9 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
 <div class="modal" id="detailModal" role="dialog" aria-modal="true">
   <div class="modal-panel">
     <button class="close-modal" id="closeModal">✕</button>
-    <div class="modal-hero" id="modalHero"></div>
+    <div class="modal-hero" id="modalHero">
+      <div class="modal-poster" id="modalPoster"></div>
+    </div>
     <div class="modal-body">
       <h2 class="modal-title" id="modalTitle">Titre</h2>
       <div class="modal-meta-row" id="modalMeta"></div>
@@ -499,8 +512,9 @@ let _c411Cache = [];
 let _vodCache = [];
 let _vodDigitalCache = [];
 let _heroItems = [];
-let _heroAvailable = false;
 let _heroIndex = 0;
+const HERO_MIN_ITEMS = 10;
+const HERO_MAX_ITEMS = 15;
 let _heroTimer = null;
 const _tabLoaded = { vod: false, cinema: false, changelog: false };
 
@@ -547,18 +561,26 @@ function _renderHeroSlide(pick) {
   bg.style.opacity = 0;
   setTimeout(() => {
     bg.style.backgroundImage = `url('${pick.backdrop || pick.poster}')`;
+    // Vignette d'affiche (portrait, non recadrée) en complément du fond large
+    // (backdrop) — sans elle, l'affiche réelle du film n'était jamais visible
+    // nulle part dans le bandeau, seulement l'image large.
+    const heroPoster = document.getElementById("hero-poster");
+    heroPoster.style.backgroundImage = pick.poster ? `url('${pick.poster}')` : "none";
+    heroPoster.style.display = pick.poster ? "block" : "none";
     document.getElementById("hero-title").textContent = pick.name;
     document.getElementById("hero-sub").textContent = pick.overview || "";
-    const badge = _heroAvailable ? '🧲 Dispo en DL' : '🔥 Tendance';
-    document.getElementById("hero-meta").innerHTML = `<span class="pill">${badge}</span> ${pick.year ? `<span class="pill">${pick.year}</span>` : ''}`;
+    document.getElementById("hero-meta").innerHTML = `<span class="pill">${pick.badge || '🔥 Tendance'}</span> ${pick.year ? `<span class="pill">${pick.year}</span>` : ''}`;
 
     const btn = document.getElementById("hero-add");
     // Ouvre la fiche (bande-annonce, description) plutôt qu'un ajout direct.
-    // Provenance transmise si l'en-tête montre un titre du catalogue Nouveautés
-    // Torrent (_heroAvailable) — sinon "La captura" et consorts perdent leur
-    // exemption du garde-fou anti-CAM à l'ajout (bug réel corrigé le 2026-08-22 :
-    // ajouté avec "En attente ~44j" malgré une vraie source WEB/2160p sur V3X).
-    btn.onclick = () => openCatalogDetail(pick, 'movie', _heroAvailable ? 'c411' : undefined);
+    // Provenance transmise seulement pour les titres confirmés du catalogue
+    // Nouveautés Torrent (pick.source === 'c411') — sinon un titre récent mais
+    // pas encore confirmé disponible perdrait à tort son exemption du garde-fou
+    // anti-CAM (bug réel corrigé le 2026-08-22 : ajouté avec "En attente ~44j"
+    // malgré une vraie source WEB/2160p sur V3X).
+    // stopPropagation : le bandeau entier ouvre déjà la même fiche au clic
+    // (openHeroDetail), sans quoi le clic remonterait et l'ouvrirait deux fois.
+    btn.onclick = (e) => { e.stopPropagation(); openCatalogDetail(pick, 'movie', pick.source); };
 
     bg.style.opacity = 1;
   }, 300);
@@ -566,53 +588,124 @@ function _renderHeroSlide(pick) {
   document.querySelectorAll(".hero-dot").forEach((d, i) => d.classList.toggle("active", i === _heroIndex));
 }
 
+function openHeroDetail() {
+  const pick = _heroItems[_heroIndex];
+  if (!pick) return;
+  openCatalogDetail(pick, 'movie', pick.source);
+}
+
 async function loadHero() {
   try {
-    // Priorité aux films du catalogue Nouveautés Torrent déjà confirmés
-    // disponibles (badge ✅, ce que la fonction Télécharger sait vraiment
-    // gérer — films uniquement) : plus utile qu'une tendance TMDB générique
-    // qui peut très bien n'être disponible nulle part chez nous. Repli sur
-    // /api/trending si rien n'est encore dispo (trackers pas configurés,
-    // ou catalogue pas encore rafraîchi) pour ne jamais laisser l'en-tête vide.
-    const cr = await apiFetch(`${BASE}/api/c411`);
+    const seen = new Set();
     let items = [];
-    let isAvailableSet = false;
+
+    // 1. Films du catalogue Nouveautés Torrent déjà confirmés disponibles
+    // (badge 🧲, ce que la fonction Télécharger sait vraiment gérer — films
+    // uniquement) : mis en avant en premier, mais rarement suffisants seuls
+    // (ce catalogue est très majoritairement composé de séries).
+    const cr = await apiFetch(`${BASE}/api/c411`);
     if (cr.ok) {
       const c411Items = (await cr.json()).items || [];
-      items = c411Items
-        .filter(m => m.type === 'movie' && (m.name || '').startsWith('🧲'))
-        .map(m => ({
-          id: m.id, tmdb_id: m.tmdb_id,
+      for (const m of c411Items) {
+        if (m.type !== 'movie' || !(m.name || '').startsWith('🧲')) continue;
+        if (seen.has(m.tmdb_id)) continue;
+        seen.add(m.tmdb_id);
+        items.push({
+          tmdb_id: m.tmdb_id,
           name: (m.name || '').replace(/^[✅⏳⚡🧲]+\s*/, ''),
           overview: m.description || '', year: m.releaseInfo || '',
-          backdrop: m.poster, poster: m.poster,
-        }));
-      isAvailableSet = items.length > 0;
+          backdrop: m.backdrop || m.poster, poster: m.poster,
+          badge: '🧲 Dispo en DL', source: 'c411',
+        });
+      }
     }
 
+    // 2. Complète avec les films du catalogue Nouveautés VOD (AlloCiné)
+    // déjà confirmés disponibles (même vérification AIOStreams que le
+    // catalogue principal) — bien plus fourni que Nouveautés Torrent
+    // (surtout composé de séries), et une vraie dispo croisée plutôt qu'une
+    // simple date de sortie TMDB. Demandé le 2026-08-30 pour garantir au
+    // moins une dizaine de films récents dans le bandeau.
+    if (items.length < HERO_MIN_ITEMS) {
+      const vr = await apiFetch(`${BASE}/api/vod`);
+      if (vr.ok) {
+        const vodItems = (await vr.json()).items || [];
+        for (const m of vodItems) {
+          if (items.length >= HERO_MAX_ITEMS) break;
+          if (!(m.name || '').startsWith('🧲')) continue;
+          if (seen.has(m.tmdb_id)) continue;
+          seen.add(m.tmdb_id);
+          items.push({
+            tmdb_id: m.tmdb_id,
+            name: (m.name || '').replace(/^[✅⏳⚡🧲]+\s*/, ''),
+            overview: m.description || '', year: m.releaseInfo || '',
+            backdrop: m.backdrop || m.poster, poster: m.poster,
+            badge: '🧲 Dispo en DL',
+          });
+        }
+      }
+    }
+
+    // 3. Si toujours pas assez (catalogues pas encore rafraîchis, peu de
+    // titres confirmés dispo ce jour-là) : sorties VOD récentes TMDB (90
+    // derniers jours), non vérifiées, juste pour varier le bandeau.
+    if (items.length < HERO_MIN_ITEMS) {
+      const dr = await apiFetch(`${BASE}/api/digital-releases`);
+      if (dr.ok) {
+        const drItems = (await dr.json()).items || [];
+        for (const m of drItems) {
+          if (items.length >= HERO_MAX_ITEMS) break;
+          if (seen.has(m.tmdb_id)) continue;
+          seen.add(m.tmdb_id);
+          items.push({
+            tmdb_id: m.tmdb_id, name: m.name, overview: m.overview || '',
+            year: m.year || '', backdrop: m.backdrop || m.poster, poster: m.poster,
+            badge: '🆕 Sortie récente',
+          });
+        }
+      }
+    }
+
+    // 4. Dernier repli si vraiment rien de récent n'a pu être récupéré
+    // (TMDB down, catalogues pas encore rafraîchis) — pour ne jamais laisser
+    // l'en-tête vide.
     if (!items.length) {
       const r = await apiFetch(`${BASE}/api/trending`);
       if (!r.ok) return;
-      items = (await r.json()).items;
+      items = (await r.json()).items || [];
       if (!items.length) return;
     }
 
     _heroItems = items;
     _heroIndex = 0;
-    _heroAvailable = isAvailableSet;
 
     const dotsContainer = document.getElementById("hero-dots");
-    dotsContainer.innerHTML = _heroItems.map((_, i) => `<div class="hero-dot ${i===0?'active':''}" onclick="goHero(${i})"></div>`).join("");
+    dotsContainer.innerHTML = _heroItems.map((_, i) => `<div class="hero-dot ${i===0?'active':''}" onclick="event.stopPropagation(); goHero(${i})"></div>`).join("");
 
     _renderHeroSlide(_heroItems[0]);
-    if (_heroTimer) clearInterval(_heroTimer);
-    _heroTimer = setInterval(() => {
-      _heroIndex = (_heroIndex + 1) % _heroItems.length;
-      _renderHeroSlide(_heroItems[_heroIndex]);
-    }, 7000);
+    _resetHeroTimer();
   } catch(e) { console.error(e); }
 }
-function goHero(i) { _heroIndex = i; _renderHeroSlide(_heroItems[i]); }
+function _resetHeroTimer() {
+  if (_heroTimer) clearInterval(_heroTimer);
+  _heroTimer = setInterval(() => {
+    _heroIndex = (_heroIndex + 1) % _heroItems.length;
+    _renderHeroSlide(_heroItems[_heroIndex]);
+  }, 7000);
+}
+function goHero(i) { _heroIndex = i; _renderHeroSlide(_heroItems[i]); _resetHeroTimer(); }
+function heroPrev() {
+  if (!_heroItems.length) return;
+  _heroIndex = (_heroIndex - 1 + _heroItems.length) % _heroItems.length;
+  _renderHeroSlide(_heroItems[_heroIndex]);
+  _resetHeroTimer();
+}
+function heroNext() {
+  if (!_heroItems.length) return;
+  _heroIndex = (_heroIndex + 1) % _heroItems.length;
+  _renderHeroSlide(_heroItems[_heroIndex]);
+  _resetHeroTimer();
+}
 
 // Watchlist & Stats
 async function reloadWatchlist() {
@@ -830,7 +923,13 @@ function openDetail(id) {
   if (!m) return;
   _openDetailId = id;
 
-  document.getElementById("modalHero").style.backgroundImage = m.poster ? `url('${m.poster}')` : 'none';
+  // Backdrop (format paysage) prioritaire sur l'affiche (portrait) : une
+  // affiche étirée en "cover" dans ce bandeau large ne montre qu'une bande
+  // recadrée en son centre (ex. le torse d'un acteur), pas l'affiche entière.
+  document.getElementById("modalHero").style.backgroundImage = (m.backdrop || m.poster) ? `url('${m.backdrop || m.poster}')` : 'none';
+  const modalPoster = document.getElementById("modalPoster");
+  modalPoster.style.backgroundImage = m.poster ? `url('${m.poster}')` : "none";
+  modalPoster.style.display = m.poster ? "block" : "none";
   document.getElementById("modalTitle").textContent = (m.name||"").replace(/^[✅⏳⚡🧲]+\s*/, "");
 
   const isSeries = m.type === 'series';
@@ -902,7 +1001,13 @@ function openCatalogDetailByIndex(which, i) {
 
 function openCatalogDetail(m, type, source) {
    _openDetailId = null;
-   document.getElementById("modalHero").style.backgroundImage = m.poster ? `url('${m.poster}')` : 'none';
+   // Backdrop (format paysage) prioritaire sur l'affiche (portrait) : une
+  // affiche étirée en "cover" dans ce bandeau large ne montre qu'une bande
+  // recadrée en son centre (ex. le torse d'un acteur), pas l'affiche entière.
+  document.getElementById("modalHero").style.backgroundImage = (m.backdrop || m.poster) ? `url('${m.backdrop || m.poster}')` : 'none';
+  const modalPoster = document.getElementById("modalPoster");
+  modalPoster.style.backgroundImage = m.poster ? `url('${m.poster}')` : "none";
+  modalPoster.style.display = m.poster ? "block" : "none";
    document.getElementById("modalTitle").textContent = m.name || m.title;
    document.getElementById("modalMeta").innerHTML = `<span class="pill">${type === 'series' ? 'Série' : 'Film'}</span> <span class="pill">${m.year || m.releaseInfo || ''}</span>`;
    document.getElementById("modalDesc").textContent = m.overview || m.description || "";

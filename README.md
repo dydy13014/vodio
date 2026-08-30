@@ -17,6 +17,7 @@ Chaque titre est matché avec [TMDB](https://www.themoviedb.org/) pour récupér
 - **Badges de disponibilité ✅/⏳** *(optionnel)* — si vous avez une instance [AIOStreams](https://github.com/Viren070/AIOStreams), VODIO indique si des sources en bonne qualité existent (seuil configurable, 720p par défaut).
 - **Agenda cinéma** — sorties en salle de la semaine (AlloCiné), purement informatif, pour ajouter à la watchlist en avance.
 - **Bandes-annonces** — récupérées à la demande depuis TMDB, affichées sur la fiche d'un titre.
+- **Jaquettes avec note incrustée** *(optionnel)* — via [RPDB](https://ratingposterdb.com), en complément de TMDB.
 - **Précache et téléchargement direct** *(optionnel, nécessite Wacustom + AllDebrid)* — préchargez un film ou une saison entière d'un clic ; téléchargez un film disponible directement depuis la page web (relayé via MediaFlow-Proxy).
 - **Notifications SMS** *(optionnel, Free Mobile)* — soyez prévenu quand un titre de votre liste devient disponible.
 - **PWA** — installable sur l'écran d'accueil du téléphone.
@@ -65,6 +66,10 @@ Sans ces variables, tous les films vont dans « Nouveautés VOD » sans badge de
 
 Ces fonctions sont spécifiques à **Wacustom + AllDebrid** (`WACUSTOM_URL`, `WACUSTOM_CONFIG`, `ALLDEBRID_API_KEY`) — sans ces variables, la watchlist retombe sur le même check AIOStreams que ci-dessus et les boutons précache/téléchargement restent masqués, le reste de l'appli fonctionne normalement.
 
+### Jaquettes RPDB
+
+Nécessite `RPDB_API_KEY` **et** `VODIO_BASE_URL` (l'URL publique de votre instance). Cette dernière est obligatoire pour cette fonctionnalité : les posters sont servis via un relais interne (`/poster/...`) qui a besoin de connaître sa propre URL publique — sans quoi la clé RPDB se retrouverait exposée en clair dans les catalogues Stremio (publics, sans authentification).
+
 ## Endpoints
 
 | Route | Description |
@@ -73,6 +78,7 @@ Ces fonctions sont spécifiques à **Wacustom + AllDebrid** (`WACUSTOM_URL`, `WA
 | `GET /catalog/movie/vodio-new.json` | Nouveautés VOD |
 | `GET /catalog/{movie,series}/vodio-c411-new.json` | Nouveautés Torrent *(si configuré)* |
 | `GET /catalog/{movie,series}/vodio-watchlist.json` | Watchlist |
+| `GET /poster/{imdb,tmdb}/{id}.jpg` | Relais poster RPDB (public, ne sert jamais la clé) *(si configuré)* |
 | `GET /` | Page web de gestion |
 | `GET /health` | 503 si le scrape AlloCiné est cassé (monitoring) |
 | `POST /api/login` / `POST /api/logout` | Session (mot de passe) |

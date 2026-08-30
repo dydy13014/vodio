@@ -22,7 +22,10 @@ class Watchlist:
     def _load(self) -> None:
         if self.path.exists():
             try:
-                self.items = json.loads(self.path.read_text())
+                loaded = json.loads(self.path.read_text())
+                if not isinstance(loaded, list):
+                    raise ValueError(f"racine JSON non-liste ({type(loaded).__name__})")
+                self.items = loaded
                 migrated = False
                 for i in self.items:
                     old = i.pop("precache_season", None)

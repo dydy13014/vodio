@@ -1,6 +1,6 @@
 """Vérification de disponibilité des sources via AIOStreams (interne).
 
-Pour chaque titre, interroge AIOStreams avec la config du compte dydy (prod) —
+Pour chaque titre, interroge AIOStreams avec la config d'un compte de référence —
 il agrège TOUTES les sources (WAStream, StreamFusion, Frenchio, Wacustom…).
 Un titre est 🧲 (dispo, téléchargeable) dès qu'au moins une source **en
 cache instantané** atteint la résolution minimale `min_res` (défaut 720p) ;
@@ -157,7 +157,7 @@ async def _check_one(
             resp = await client.get(f"{base}/{config}/{path}")
             resp.raise_for_status()
             streams = resp.json().get("streams", [])
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx.HTTPError, ValueError, AttributeError) as exc:
             log.warning("check sources %s (%s) : %s", meta["id"], meta["name"], exc)
             return
         best = 0
@@ -251,8 +251,8 @@ def _scan_streams(
     liste triée des candidats torrent non-cachés plausibles, si la
     confirmation de cache atteignant `min_res` vient spécifiquement de
     Lumio — sert au badge ⚡ additionnel, cf. `_badge_prefix`). Un candidat =
-    (source Zilean ?, taille Go, résolution, lien magnet), trié non-Zilean
-    d'abord puis du plus petit au plus gros dans chaque groupe. Le magnet du
+    (taille Go, résolution, lien magnet), trié du plus petit au plus gros.
+    Zilean est exclu en amont (pas seulement déprioritisé, cf. plus bas). Le magnet du
     flux caché sert au téléchargement direct (VODIO n'a pas forcément
     lui-même déclenché ce cache — ex. déjà caché par un autre compte
     AllDebrid) — un titre peut être ✅ via une source DDL déjà cachée alors

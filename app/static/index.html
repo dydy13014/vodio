@@ -370,7 +370,8 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
     <div id="tab-changelog" class="hidden">
        <div class="section-header">Mises à jour</div>
        <div id="changelog-list" style="max-width:600px; display:flex; flex-direction:column; gap:1.5rem;"></div>
-       <button class="btn-ghost btn-danger" style="margin-top:2rem;" onclick="logout()">⏻ Déconnexion</button>
+       <button class="btn-ghost" style="margin-top:2rem;" onclick="copyManifestUrl()">📋 Copier le lien du manifest Stremio</button>
+       <button class="btn-ghost btn-danger" style="margin-top:1rem;" onclick="logout()">⏻ Déconnexion</button>
     </div>
 
   </main>
@@ -454,6 +455,12 @@ async function logout() {
   document.getElementById("user").value = "";
   document.getElementById("pw").value = "";
   document.getElementById("gate-err").textContent = "";
+}
+
+function copyManifestUrl() {
+  const url = `${location.origin}${BASE}/manifest.json`;
+  navigator.clipboard.writeText(url);
+  toast("Lien copié — à coller dans Stremio (Addons > URL du manifest)");
 }
 
 function toast(msg) {

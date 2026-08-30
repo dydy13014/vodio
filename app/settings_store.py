@@ -72,10 +72,13 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # VODIO_EXTRA_USERS : remplacé par un vrai formulaire (liste des comptes +
 # ajout/suppression) plutôt qu'un champ texte "nom:motdepasse,..." à éditer
 # à la main (cf. merge_extra_users + section dédiée dans setup.html).
+# C411_URL/TR4KER_URL/V3X_URL : ce sont des adresses fixes, identiques pour
+# tout le monde (déjà en défaut dans main.py) — seule la clé API diffère
+# réellement d'un utilisateur à l'autre, donc masquées ici.
 HIDDEN_FROM_FORM = {
     "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "VODIO_ADDON_ID",
     "WACUSTOM_URL", "WACUSTOM_CONFIG", "LUMIO_MANIFEST_ID",
-    "VODIO_EXTRA_USERS",
+    "VODIO_EXTRA_USERS", "C411_URL", "TR4KER_URL", "V3X_URL",
 }
 
 # (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)

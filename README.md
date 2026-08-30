@@ -55,6 +55,8 @@ Rendez-vous sur `http://<votre-ip>:8000/setup`, entrez ce code, remplissez les c
 - **Configuration / admin** : `http://<votre-ip>:8000/setup` (redevient `/admin`, protégé par le mot de passe du compte principal, une fois l'instance configurée)
 
 > ⚠️ La page web et les endpoints `/api/*` sont protégés par mot de passe. Le manifest et les catalogues restent publics (Stremio en a besoin). Exposez de préférence derrière un reverse-proxy HTTPS.
+>
+> `/api/login` a un verrou anti-brute-force basique intégré (5 échecs → 15 min de blocage par IP). Si vous exposez VODIO derrière un reverse-proxy, ce verrou peut bloquer tout le monde en même temps si l'IP vue par l'appli est celle du proxy plutôt que celle du client (l'appli ne fait pas confiance à `X-Forwarded-For` par défaut, falsifiable si le proxy ne le filtre pas) — pour une exposition sérieuse, préférez en complément un vrai rate-limit/fail2ban côté proxy.
 
 ## Configuration
 

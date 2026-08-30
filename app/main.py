@@ -569,13 +569,56 @@ def _check_credentials(name: str, password: str) -> Watchlist | None:
     return account["watchlist"]
 
 
+# Anti brute-force sur /api/login (2026-08-30) — un déploiement public n'a
+# pas forcément de fail2ban/reverse-proxy en amont, contrairement à une
+# instance déjà protégée par ailleurs. Verrou en mémoire par IP : 5 échecs
+# → 15 min de blocage. ⚠️ `request.client.host` est l'IP du reverse-proxy
+# si l'appli tourne derrière un (Traefik, Nginx…) sans transmission fiable
+# de l'IP réelle — dans ce cas, toutes les requêtes semblent venir de la
+# même IP et un seul acteur malveillant peut bloquer tout le monde. Pas de
+# lecture de X-Forwarded-For ici (falsifiable si non filtré par le proxy) ;
+# pour une exposition sérieuse, préférer un vrai rate-limit côté proxy.
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_S = 15 * 60
+_LOGIN_ATTEMPTS: dict[str, dict] = {}  # ip -> {"count", "locked_until", "last_attempt"}
+
+
+def _login_rate_limited(ip: str) -> bool:
+    entry = _LOGIN_ATTEMPTS.get(ip)
+    return bool(entry and entry["locked_until"] > time.time())
+
+
+def _register_login_failure(ip: str) -> None:
+    now = time.time()
+    # Purge opportuniste (même principe que SESSIONS ci-dessous) : sans ça
+    # la table grossit indéfiniment au fil des IPs qui échouent puis partent.
+    for old_ip, e in list(_LOGIN_ATTEMPTS.items()):
+        if now - e["last_attempt"] > LOGIN_LOCKOUT_S * 2:
+            del _LOGIN_ATTEMPTS[old_ip]
+    entry = _LOGIN_ATTEMPTS.setdefault(ip, {"count": 0, "locked_until": 0.0, "last_attempt": now})
+    entry["count"] += 1
+    entry["last_attempt"] = now
+    if entry["count"] >= LOGIN_MAX_ATTEMPTS:
+        entry["locked_until"] = now + LOGIN_LOCKOUT_S
+        entry["count"] = 0
+
+
+def _register_login_success(ip: str) -> None:
+    _LOGIN_ATTEMPTS.pop(ip, None)
+
+
 @app.post("/api/login")
-async def api_login(payload: dict):
+async def api_login(payload: dict, request: Request):
+    ip = request.client.host if request.client else "unknown"
+    if _login_rate_limited(ip):
+        raise HTTPException(status_code=429, detail="Trop de tentatives — réessayez dans quelques minutes")
     name = (payload.get("name") or "").strip()
     password = payload.get("password") or ""
     wl = _check_credentials(name, password)
     if wl is None:
+        _register_login_failure(ip)
         raise HTTPException(status_code=401, detail="Nom ou mot de passe invalide")
+    _register_login_success(ip)
     now = time.time()
     # Purge opportuniste des jetons expirés à chaque connexion — sans ça
     # SESSIONS ne redescend jamais tant que le conteneur tourne (relevé par

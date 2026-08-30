@@ -285,6 +285,7 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
     <div class="nav-item" data-tab="vod" onclick="switchTab('vod')"><span class="icon">🎞️</span><span class="tooltip">Nouveautés VOD</span></div>
     <div class="nav-item" data-tab="cinema" onclick="switchTab('cinema')"><span class="icon">🎟️</span><span class="tooltip">Sorties Cinéma</span></div>
     <div class="nav-item theme-toggle" id="themeToggle" onclick="toggleTheme()"><span class="icon">🌙</span><span class="tooltip">Thème</span></div>
+    <div class="nav-item" onclick="copyManifestUrl()" title="Copier le lien du manifest Stremio"><span class="icon">📋</span><span class="tooltip">Manifest Stremio</span></div>
     <div class="nav-item" onclick="logout()" title="Déconnexion"><span class="icon">⏻</span><span class="tooltip">Déconnexion</span></div>
     <div class="nav-item" style="font-size:0.7rem; color:var(--muted);" onclick="switchTab('changelog')"><span class="icon">ℹ️</span><span class="tooltip" id="version-badge">v...</span></div>
   </aside>
@@ -370,8 +371,7 @@ button, input { font: inherit; color: inherit; border: none; background: none; }
     <div id="tab-changelog" class="hidden">
        <div class="section-header">Mises à jour</div>
        <div id="changelog-list" style="max-width:600px; display:flex; flex-direction:column; gap:1.5rem;"></div>
-       <button class="btn-ghost" style="margin-top:2rem;" onclick="copyManifestUrl()">📋 Copier le lien du manifest Stremio</button>
-       <button class="btn-ghost btn-danger" style="margin-top:1rem;" onclick="logout()">⏻ Déconnexion</button>
+       <button class="btn-ghost btn-danger" style="margin-top:2rem;" onclick="logout()">⏻ Déconnexion</button>
     </div>
 
   </main>

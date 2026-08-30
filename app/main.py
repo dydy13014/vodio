@@ -32,6 +32,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
 
+from . import settings_store
+# Préremplit os.environ avec la configuration sauvegardée depuis /setup, AVANT
+# tout autre import (tmdb/notify lisent leur propre config au chargement du
+# module) et avant toute lecture ci-dessous. Ne touche jamais une variable
+# déjà définie par le vrai environnement.
+settings_store.apply_to_environ()
+
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -42,7 +49,7 @@ from .watchlist import Watchlist
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 log = logging.getLogger("vodio")
 
-TMDB_API_KEY = os.environ["TMDB_API_KEY"]
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
 ALLOCINE_PAGES = int(os.environ.get("ALLOCINE_PAGES", "3"))
 REFRESH_HOURS = int(os.environ.get("REFRESH_HOURS", "24"))
 DATA_FILE = Path(os.environ.get("DATA_FILE", "/app/data/catalog.json"))
@@ -64,6 +71,16 @@ VODIO_PASSWORD = os.environ.get("VODIO_PASSWORD", "")
 # compte (comportement historique conservé si la variable n'est pas définie).
 VODIO_DEFAULT_NAME = os.environ.get("VODIO_DEFAULT_NAME", "")
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Premier démarrage sans TMDB_API_KEY/VODIO_PASSWORD (ni via l'environnement,
+# ni via settings_store) : sert /setup au lieu du dashboard tant que ces deux
+# champs obligatoires ne sont pas remplis (cf. settings_store.py).
+SETUP_NEEDED = not settings_store.is_configured()
+if SETUP_NEEDED:
+    log.warning(
+        "=== VODIO n'est pas configuré === Rendez-vous sur /setup avec ce code : %s",
+        settings_store.get_or_create_setup_code(),
+    )
 # Badges 🧲/⏳ via AIOStreams (config d'un compte de référence) — désactivés si CONFIG absent
 STREAM_CHECK_URL = os.environ.get("STREAM_CHECK_URL", "http://aiostreams:3000")
 STREAM_CHECK_CONFIG = os.environ.get("STREAM_CHECK_CONFIG", "")
@@ -254,6 +271,9 @@ async def _refresh_watchlist_badges(label: str, wl: Watchlist, sms: bool = True)
 
 
 async def refresh() -> None:
+    if not TMDB_API_KEY:
+        state["last_error"] = "VODIO non configuré — rendez-vous sur /setup"
+        return
     films = await scraper.scrape(ALLOCINE_PAGES)
     if not films:
         state["last_error"] = "scrape AlloCiné : 0 film (structure HTML changée ?)"
@@ -280,6 +300,9 @@ async def refresh_cinema() -> None:
     aucune source VOD/torrent avant des mois (cf. MIN_DAYS_FOR_ACTIVE_CHECK),
     inutile de vérifier. Onglet purement informatif, pour ajouter à la
     watchlist en avance et être notifié plus tard quand ça sort en VOD."""
+    if not TMDB_API_KEY:
+        state_cinema["last_error"] = "VODIO non configuré — rendez-vous sur /setup"
+        return
     films = await cinema_scraper.scrape()
     if not films:
         state_cinema["last_error"] = "scrape agenda cinéma : 0 film (structure HTML changée ?)"
@@ -615,9 +638,70 @@ async def catalog_watchlist_series():
     return JSONResponse({"metas": watchlist.metas("series")}, headers=CORS_LIVE)
 
 
+# ── Configuration initiale (/setup) et admin (édition ultérieure) ──────────
+# Même page pour les deux : /setup tant que TMDB_API_KEY/VODIO_PASSWORD ne
+# sont pas définis (protégée par le code affiché une fois dans les logs au
+# démarrage) ; une fois configuré, /admin sert la même page mais l'édition
+# exige une connexion via le compte principal (cf. _require_admin).
+@app.get("/setup")
+@app.get("/admin")
+async def setup_page():
+    return FileResponse(STATIC_DIR / "setup.html")
+
+
+@app.get("/api/setup/status")
+async def api_setup_status():
+    return {"configured": not SETUP_NEEDED}
+
+
+@app.get("/api/setup/fields")
+async def api_setup_fields():
+    return {"fields": [
+        {"key": k, "required": req, "secret": secret, "label": label, "hint": hint}
+        for k, req, secret, label, hint in settings_store.FIELDS
+    ]}
+
+
+def _require_admin(authorization: str = Header(default="")) -> None:
+    """Autorise si l'instance n'est pas encore configurée (protégée par le
+    code /setup, vérifié séparément côté appelant) ou si la session est celle
+    du compte principal — jamais un compte additionnel (VODIO_EXTRA_USERS)."""
+    if SETUP_NEEDED:
+        return
+    token = authorization.removeprefix("Bearer ").strip()
+    session = SESSIONS.get(token) if token else None
+    if session is None or session["expires"] < time.time() or session["watchlist"] is not watchlist:
+        raise HTTPException(status_code=403, detail="Accès admin réservé au compte principal")
+
+
+@app.get("/api/setup/current")
+async def api_setup_current(_: None = Depends(_require_admin)):
+    """État actuel (booléen « défini ou non », jamais la valeur réelle d'un
+    champ secret) — sert à pré-remplir le formulaire d'édition après le
+    premier setup."""
+    return {key: bool(os.environ.get(key)) for key, *_rest in settings_store.FIELDS}
+
+
+@app.post("/api/setup")
+async def api_setup_save(payload: dict, authorization: str = Header(default="")):
+    fields = payload.get("fields") or {}
+    if SETUP_NEEDED:
+        code = (payload.get("code") or "").strip()
+        if not code or not hmac.compare_digest(code, settings_store.get_or_create_setup_code()):
+            raise HTTPException(status_code=403, detail="Code invalide")
+        if not (fields.get("TMDB_API_KEY") and fields.get("VODIO_PASSWORD")):
+            raise HTTPException(status_code=400, detail="TMDB_API_KEY et VODIO_PASSWORD sont obligatoires")
+    else:
+        _require_admin(authorization)
+    settings_store.save_settings(fields)
+    return {"ok": True, "restart_required": True}
+
+
 # ── Page web de gestion + assets PWA (partagés, une seule URL pour tous) ────
 @app.get("/")
 async def home():
+    if SETUP_NEEDED:
+        return FileResponse(STATIC_DIR / "setup.html")
     return FileResponse(STATIC_DIR / "index.html")
 
 

@@ -10,6 +10,7 @@ Chaque titre est matché avec [TMDB](https://www.themoviedb.org/) pour récupér
 
 ## Fonctionnalités
 
+- **Configuration par page web** — aucun fichier à éditer : au premier démarrage, un code admin s'affiche dans les logs, `/setup` permet de tout saisir depuis un formulaire.
 - **Catalogue « Nouveautés VOD »** — les derniers films sortis en VOD en France (AlloCiné).
 - **Catalogue « Nouveautés Torrent »** *(optionnel)* — films et séries récents sourcés d'un tracker Torznab, filtrés (audio français, résolution minimale), dédupliqués.
 - **Watchlist perso** (films **et** séries) — page web protégée par mot de passe : cherchez un titre, ajoutez-le, il apparaît dans Stremio dans « VODIO - Ma liste ».
@@ -36,22 +37,32 @@ Chaque titre est matché avec [TMDB](https://www.themoviedb.org/) pour récupér
 
 ```bash
 git clone <ce-repo> vodio && cd vodio
-cp .env.example vodio.env         # puis remplir TMDB_API_KEY + VODIO_PASSWORD
-chmod 600 vodio.env
-cp docker-compose.example.yml docker-compose.yml   # adapter si besoin
+cp docker-compose.example.yml docker-compose.yml   # adapter le port/volume si besoin
 docker compose up -d --build
 ```
 
-L'addon écoute sur le port `8000`.
+L'addon écoute sur le port `8000`. **Aucun fichier à éditer avant le premier lancement** : au démarrage, si `TMDB_API_KEY`/mot de passe ne sont pas définis, VODIO affiche un code admin dans ses logs et bascule sur une page de configuration.
+
+```bash
+docker logs vodio   # cherchez : "VODIO n'est pas configuré === Rendez-vous sur /setup avec ce code : XXXX"
+```
+
+Rendez-vous sur `http://<votre-ip>:8000/setup`, entrez ce code, remplissez les champs voulus (seuls `TMDB_API_KEY` et le mot de passe watchlist sont obligatoires, tout le reste est optionnel — cf. [Configuration](#configuration)), puis redémarrez le conteneur (`docker compose restart`) pour appliquer.
 
 - **Page web (watchlist)** : `http://<votre-ip>:8000/`
 - **Manifest à installer dans Stremio** : `http://<votre-ip>:8000/manifest.json`
+- **Configuration / admin** : `http://<votre-ip>:8000/setup` (redevient `/admin`, protégé par le mot de passe du compte principal, une fois l'instance configurée)
 
 > ⚠️ La page web et les endpoints `/api/*` sont protégés par mot de passe. Le manifest et les catalogues restent publics (Stremio en a besoin). Exposez de préférence derrière un reverse-proxy HTTPS.
 
 ## Configuration
 
-Toutes les variables sont dans [`.env.example`](.env.example) (commentées, groupées par fonctionnalité). Les seules obligatoires : `TMDB_API_KEY` et `VODIO_PASSWORD`. Tout le reste (nouveautés torrent, badges de dispo, watchlist renforcée, précache/DL, multi-utilisateurs, SMS) est optionnel et se désactive proprement si non configuré.
+Deux façons équivalentes de configurer VODIO — un déploiement peut mélanger les deux, les variables d'environnement gardent toujours la priorité :
+
+1. **Page web `/setup` puis `/admin`** (recommandé) — décrite ci-dessus, rien à éditer à la main. Chaque champ est décrit dans l'interface.
+2. **Fichier `.env`** (déploiement classique) — copier [`.env.example`](.env.example) en `vodio.env`, remplir, `chmod 600`, et référencer `env_file: vodio.env` dans votre `docker-compose.yml`. Toutes les variables y sont commentées et groupées par fonctionnalité.
+
+Dans les deux cas, les seules valeurs obligatoires sont `TMDB_API_KEY` et le mot de passe watchlist (`VODIO_PASSWORD`). Tout le reste (nouveautés torrent, badges de dispo, watchlist renforcée, précache/DL, multi-utilisateurs, SMS, jaquettes RPDB) est optionnel et se désactive proprement si non configuré.
 
 ### Badges de disponibilité
 
@@ -79,7 +90,9 @@ Nécessite `RPDB_API_KEY` **et** `VODIO_BASE_URL` (l'URL publique de votre insta
 | `GET /catalog/{movie,series}/vodio-c411-new.json` | Nouveautés Torrent *(si configuré)* |
 | `GET /catalog/{movie,series}/vodio-watchlist.json` | Watchlist |
 | `GET /poster/{imdb,tmdb}/{id}.jpg` | Relais poster RPDB (public, ne sert jamais la clé) *(si configuré)* |
-| `GET /` | Page web de gestion |
+| `GET /` | Page web de gestion (ou page de configuration si instance pas encore configurée) |
+| `GET /setup` / `GET /admin` | Configuration (première fois par code, ensuite par mot de passe admin) |
+| `POST /api/setup` | Enregistre la configuration (public par code tant que non configuré, protégé ensuite) |
 | `GET /health` | 503 si le scrape AlloCiné est cassé (monitoring) |
 | `POST /api/login` / `POST /api/logout` | Session (mot de passe) |
 | `GET /api/{vod,cinema,c411}` | Données brutes des catalogues, avec badges (protégés) |

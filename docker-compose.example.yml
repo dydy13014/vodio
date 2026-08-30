@@ -5,7 +5,10 @@ services:
     image: vodio:local
     container_name: vodio
     restart: unless-stopped
-    env_file: vodio.env
+    # Facultatif — seulement si vous préférez la config par fichier plutôt
+    # que par la page web /setup (cf. README) : décommentez après avoir créé
+    # vodio.env (cp .env.example vodio.env && chmod 600 vodio.env).
+    # env_file: vodio.env
     ports:
       - "8000:8000"          # accès direct http://IP:8000 (manifest, page web)
     volumes:

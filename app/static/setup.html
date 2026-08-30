@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VODIO — Configuration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08090d; --surface: #11131a; --text: #f7f7fb; --muted: #a9adba;
+  --accent: #e6394a; --accent-2: #ff5468; --border: rgba(255,255,255,0.08);
+  --ok: #3ecf70; --danger: #ff5a5a; --radius: 16px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: "Inter", system-ui, sans-serif; padding: 2rem 1rem;
+  display: flex; justify-content: center;
+}
+.wrap { width: 100%; max-width: 640px; }
+h1 { font-size: 1.6rem; font-weight: 800; margin-bottom: 0.3rem; }
+.sub { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1.5rem; margin-bottom: 1.5rem;
+}
+.card h2 { font-size: 1rem; margin: 0 0 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.3rem; }
+.hint { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
+input[type=text], input[type=password], input[type=number] {
+  width: 100%; padding: 0.7rem 0.9rem; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03); color: var(--text); font-size: 0.95rem; margin-bottom: 1rem;
+}
+input:focus { outline: none; border-color: var(--accent); }
+.field.required label::after { content: " *"; color: var(--accent-2); }
+button {
+  width: 100%; padding: 0.9rem; border-radius: 10px; border: none; cursor: pointer;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem;
+}
+button:hover { background: var(--accent-2); }
+.msg { margin-top: 1rem; font-size: 0.9rem; }
+.msg.ok { color: var(--ok); }
+.msg.err { color: var(--danger); }
+.hidden { display: none; }
+a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚙️ VODIO — Configuration</h1>
+  <p class="sub" id="subtitle">Chargement…</p>
+
+  <!-- Écran 1 : instance pas encore configurée -->
+  <div id="setup-screen" class="hidden">
+    <div class="card">
+      <h2>Code admin</h2>
+      <div class="field required">
+        <label>Code affiché dans les logs du conteneur</label>
+        <span class="hint">Commande : <code>docker logs vodio</code> (cherchez « VODIO n'est pas configuré »)</span>
+        <input type="text" id="setupCode" autocomplete="off">
+      </div>
+    </div>
+    <div id="fields"></div>
+    <button onclick="submitForm(false)">Enregistrer</button>
+    <p class="msg" id="setupMsg"></p>
+  </div>
+
+  <!-- Écran 2 : déjà configuré, login admin -->
+  <div id="login-screen" class="hidden">
+    <div class="card">
+      <h2>Connexion admin</h2>
+      <p class="hint">Seul le compte principal peut modifier la configuration.</p>
+      <div class="field">
+        <label>Nom (laisser vide si compte principal sans nom)</label>
+        <input type="text" id="loginName" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Mot de passe</label>
+        <input type="password" id="loginPassword" autocomplete="current-password">
+      </div>
+    </div>
+    <button onclick="doLogin()">Se connecter</button>
+    <p class="msg" id="loginMsg"></p>
+  </div>
+
+  <!-- Écran 3 : édition (déjà connecté en admin) -->
+  <div id="edit-screen" class="hidden">
+    <div id="editFields"></div>
+    <button onclick="submitForm(true)">Enregistrer</button>
+    <p class="msg" id="editMsg"></p>
+    <p style="margin-top:1.5rem;"><a href="/">← Retour à l'application</a></p>
+  </div>
+</div>
+
+<script>
+const BASE = "";
+let FIELDS = [];
+let editToken = null;
+
+function fieldHTML(f, currentlySet) {
+  const type = f.secret ? "password" : (/HOURS|PAGES|LIMIT|QUALITY_MIN/.test(f.key) ? "number" : "text");
+  const placeholder = currentlySet ? "(déjà configuré — laisser vide pour ne pas changer)" : "";
+  return `<div class="field ${f.required ? 'required' : ''}">
+    <label>${f.label}</label>
+    ${f.hint ? `<span class="hint">${f.hint}</span>` : ""}
+    <input type="${type}" data-key="${f.key}" placeholder="${placeholder}">
+  </div>`;
+}
+
+async function loadFields() {
+  const r = await fetch(`${BASE}/api/setup/fields`);
+  FIELDS = (await r.json()).fields;
+}
+
+function renderForm(containerId, currentState) {
+  const groups = {
+    "Obligatoire": FIELDS.filter(f => f.required),
+    "Badges de disponibilité (AIOStreams)": FIELDS.filter(f => ["STREAM_CHECK_URL","STREAM_CHECK_CONFIG","VODIO_QUALITY_MIN"].includes(f.key)),
+    "Nouveautés Torrent (Torznab)": FIELDS.filter(f => ["C411_URL","C411_API_KEY","TR4KER_URL","TR4KER_API_KEY","V3X_URL","V3X_API_KEY"].includes(f.key)),
+    "Précache / téléchargement (Wacustom + AllDebrid + MediaFlow)": FIELDS.filter(f => ["WACUSTOM_URL","WACUSTOM_CONFIG","ALLDEBRID_API_KEY","MEDIAFLOW_URL","MEDIAFLOW_API_PASSWORD"].includes(f.key)),
+    "Jaquettes RPDB": FIELDS.filter(f => ["RPDB_API_KEY","VODIO_BASE_URL"].includes(f.key)),
+    "Multi-utilisateurs & SMS": FIELDS.filter(f => ["VODIO_EXTRA_USERS","VODIO_NOSMS_USERS","VODIO_SMS_USER","VODIO_SMS_PASS"].includes(f.key)),
+    "Personnalisation": FIELDS.filter(f => ["VODIO_DEFAULT_NAME","ALLOCINE_PAGES","REFRESH_HOURS","VODIO_ADDON_ID","VODIO_ADDON_NAME"].includes(f.key)),
+  };
+  let html = "";
+  for (const [title, fields] of Object.entries(groups)) {
+    if (!fields.length) continue;
+    html += `<div class="card"><h2>${title}</h2>${fields.map(f => fieldHTML(f, currentState[f.key])).join("")}</div>`;
+  }
+  document.getElementById(containerId).innerHTML = html;
+}
+
+function collectForm(containerId) {
+  const out = {};
+  document.querySelectorAll(`#${containerId} input[data-key]`).forEach(el => {
+    if (el.value) out[el.dataset.key] = el.value;
+  });
+  return out;
+}
+
+async function submitForm(isEdit) {
+  const containerId = isEdit ? "editFields" : "fields";
+  const msgId = isEdit ? "editMsg" : "setupMsg";
+  const fields = collectForm(containerId);
+  const body = { fields };
+  const headers = { "Content-Type": "application/json" };
+  if (isEdit) {
+    headers["Authorization"] = `Bearer ${editToken}`;
+  } else {
+    body.code = document.getElementById("setupCode").value.trim();
+  }
+  const r = await fetch(`${BASE}/api/setup`, { method: "POST", headers, body: JSON.stringify(body) });
+  const msg = document.getElementById(msgId);
+  if (r.ok) {
+    msg.className = "msg ok";
+    msg.textContent = "✅ Configuration enregistrée — redémarrez le conteneur pour l'appliquer (docker compose restart).";
+  } else {
+    const data = await r.json().catch(() => ({}));
+    msg.className = "msg err";
+    msg.textContent = "❌ " + (data.detail || "Échec de l'enregistrement");
+  }
+}
+
+async function doLogin() {
+  const name = document.getElementById("loginName").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const r = await fetch(`${BASE}/api/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, password }),
+  });
+  const msg = document.getElementById("loginMsg");
+  if (!r.ok) {
+    msg.className = "msg err";
+    msg.textContent = "❌ Identifiants invalides";
+    return;
+  }
+  const data = await r.json();
+  editToken = data.token;
+  const cr = await fetch(`${BASE}/api/setup/current`, { headers: { "Authorization": `Bearer ${editToken}` } });
+  if (!cr.ok) {
+    msg.className = "msg err";
+    msg.textContent = "❌ Accès admin réservé au compte principal";
+    return;
+  }
+  const currentState = await cr.json();
+  renderForm("editFields", currentState);
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("edit-screen").classList.remove("hidden");
+}
+
+async function init() {
+  await loadFields();
+  const r = await fetch(`${BASE}/api/setup/status`);
+  const { configured } = await r.json();
+  if (!configured) {
+    document.getElementById("subtitle").textContent = "Première configuration — entrez le code affiché dans les logs, puis remplissez les champs voulus.";
+    renderForm("fields", {});
+    document.getElementById("setup-screen").classList.remove("hidden");
+  } else {
+    document.getElementById("subtitle").textContent = "Instance déjà configurée — connectez-vous en tant que compte principal pour modifier.";
+    document.getElementById("login-screen").classList.remove("hidden");
+  }
+}
+init();
+</script>
+</body>
+</html>

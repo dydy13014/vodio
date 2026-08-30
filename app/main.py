@@ -657,13 +657,13 @@ async def api_setup_status():
 @app.get("/api/setup/fields")
 async def api_setup_fields():
     fields = [
-        {"key": k, "required": req, "secret": secret, "label": label, "hint": hint}
-        for k, req, secret, label, hint in settings_store.FIELDS
+        {"key": k, "required": req, "secret": secret, "label": label, "hint": hint, "recommended": rec}
+        for k, req, secret, label, hint, rec in settings_store.FIELDS
         if k not in settings_store.HIDDEN_FROM_FORM
     ]
     fields += [
-        {"key": ck, "required": False, "secret": False, "label": label, "hint": hint}
-        for ck, _url_key, _cfg_key, label, hint in settings_store.COMPOSITE_FIELDS
+        {"key": ck, "required": False, "secret": False, "label": label, "hint": hint, "recommended": rec}
+        for ck, _url_key, _cfg_key, label, hint, rec in settings_store.COMPOSITE_FIELDS
     ]
     return {"fields": fields}
 

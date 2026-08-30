@@ -18,35 +18,38 @@ log = logging.getLogger("vodio.settings")
 
 SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", "/app/data/settings.json"))
 
-# (clé env, obligatoire, secret, libellé, description courte)
-FIELDS: list[tuple[str, bool, bool, str, str]] = [
-    ("TMDB_API_KEY", True, True, "Clé API TMDB", "Obligatoire — gratuite sur themoviedb.org/settings/api"),
-    ("VODIO_PASSWORD", True, True, "Mot de passe watchlist", "Obligatoire — protège la page web et les API"),
-    ("VODIO_DEFAULT_NAME", False, False, "Nom du compte principal", "Laisser vide pour se connecter avec le champ Nom vide"),
-    ("ALLOCINE_PAGES", False, False, "Pages AlloCiné scrapées", "Défaut : 5"),
-    ("REFRESH_HOURS", False, False, "Intervalle de rafraîchissement (heures)", "Défaut : 24"),
-    ("C411_URL", False, False, "URL Torznab C411", "ex. https://c411.org/api"),
-    ("C411_API_KEY", False, True, "Clé API C411", ""),
-    ("TR4KER_URL", False, False, "URL Torznab Tr4ker", "ex. https://tr4ker.net/api"),
-    ("TR4KER_API_KEY", False, True, "Clé API Tr4ker", ""),
-    ("V3X_URL", False, False, "URL Torznab V3X", ""),
-    ("V3X_API_KEY", False, True, "Clé API V3X", ""),
-    ("STREAM_CHECK_URL", False, False, "URL interne de votre AIOStreams", "ex. http://aiostreams:3000"),
-    ("STREAM_CHECK_CONFIG", False, True, "Config AIOStreams", "stremio/<uuid>/<credentials-chiffrés>"),
-    ("VODIO_QUALITY_MIN", False, False, "Résolution minimale pour le badge 🧲", "Défaut : 720"),
-    ("WACUSTOM_URL", False, False, "URL Wacustom (watchlist)", "ex. http://wacustom:7000"),
-    ("WACUSTOM_CONFIG", False, True, "Config Wacustom", ""),
-    ("ALLDEBRID_API_KEY", False, True, "Clé API AllDebrid", ""),
-    ("MEDIAFLOW_URL", False, False, "URL de votre MediaFlow-Proxy", "ex. https://votre-domaine.tld/mf"),
-    ("MEDIAFLOW_API_PASSWORD", False, True, "Mot de passe MediaFlow", ""),
-    ("VODIO_EXTRA_USERS", False, True, "Utilisateurs additionnels", "nom1:motdepasse1,nom2:motdepasse2"),
-    ("VODIO_NOSMS_USERS", False, False, "Utilisateurs exclus des SMS", "nom1,nom2"),
-    ("VODIO_SMS_USER", False, False, "Identifiant Free Mobile", ""),
-    ("VODIO_SMS_PASS", False, True, "Clé API SMS Free Mobile", ""),
-    ("VODIO_ADDON_ID", False, False, "ID de l'addon Stremio", "ex. org.monpseudo.vodio"),
-    ("VODIO_ADDON_NAME", False, False, "Nom de l'addon Stremio", "Défaut : VODIO"),
-    ("RPDB_API_KEY", False, True, "Clé API RPDB (jaquettes avec note)", ""),
-    ("VODIO_BASE_URL", False, False, "URL publique de cette instance", "requis pour RPDB — ex. https://votre-domaine.tld/vodio"),
+# (clé env, obligatoire, secret, libellé, description courte, recommandé)
+# "recommandé" = débloque une fonctionnalité entière (pas juste un réglage
+# cosmétique) — affiché avec un badge distinct de l'astérisque (réservé aux
+# champs strictement obligatoires) dans /setup.
+FIELDS: list[tuple[str, bool, bool, str, str, bool]] = [
+    ("TMDB_API_KEY", True, True, "Clé API TMDB", "Obligatoire — gratuite sur themoviedb.org/settings/api", False),
+    ("VODIO_PASSWORD", True, True, "Mot de passe watchlist", "Obligatoire — protège la page web et les API", False),
+    ("VODIO_DEFAULT_NAME", False, False, "Nom du compte principal", "Laisser vide pour se connecter avec le champ Nom vide", False),
+    ("ALLOCINE_PAGES", False, False, "Pages AlloCiné scrapées", "Défaut : 5", False),
+    ("REFRESH_HOURS", False, False, "Intervalle de rafraîchissement (heures)", "Défaut : 24", False),
+    ("C411_URL", False, False, "URL Torznab C411", "ex. https://c411.org/api", True),
+    ("C411_API_KEY", False, True, "Clé API C411", "", True),
+    ("TR4KER_URL", False, False, "URL Torznab Tr4ker", "ex. https://tr4ker.net/api", False),
+    ("TR4KER_API_KEY", False, True, "Clé API Tr4ker", "", False),
+    ("V3X_URL", False, False, "URL Torznab V3X", "", False),
+    ("V3X_API_KEY", False, True, "Clé API V3X", "", False),
+    ("STREAM_CHECK_URL", False, False, "URL interne de votre AIOStreams", "ex. http://aiostreams:3000", False),
+    ("STREAM_CHECK_CONFIG", False, True, "Config AIOStreams", "stremio/<uuid>/<credentials-chiffrés>", False),
+    ("VODIO_QUALITY_MIN", False, False, "Résolution minimale pour le badge 🧲", "Défaut : 720", False),
+    ("WACUSTOM_URL", False, False, "URL Wacustom (watchlist)", "ex. http://wacustom:7000", False),
+    ("WACUSTOM_CONFIG", False, True, "Config Wacustom", "", False),
+    ("ALLDEBRID_API_KEY", False, True, "Clé API AllDebrid", "", True),
+    ("MEDIAFLOW_URL", False, False, "URL de votre MediaFlow-Proxy", "ex. https://votre-domaine.tld/mf", True),
+    ("MEDIAFLOW_API_PASSWORD", False, True, "Mot de passe MediaFlow", "", True),
+    ("VODIO_EXTRA_USERS", False, True, "Utilisateurs additionnels", "nom1:motdepasse1,nom2:motdepasse2", True),
+    ("VODIO_NOSMS_USERS", False, False, "Utilisateurs exclus des SMS", "nom1,nom2", False),
+    ("VODIO_SMS_USER", False, False, "Identifiant Free Mobile", "", False),
+    ("VODIO_SMS_PASS", False, True, "Clé API SMS Free Mobile", "", False),
+    ("VODIO_ADDON_ID", False, False, "ID de l'addon Stremio", "ex. org.monpseudo.vodio", False),
+    ("VODIO_ADDON_NAME", False, False, "Nom de l'addon Stremio", "Défaut : VODIO", False),
+    ("RPDB_API_KEY", False, True, "Clé API RPDB (jaquettes avec note)", "", False),
+    ("VODIO_BASE_URL", False, False, "URL publique de cette instance", "requis pour RPDB — ex. https://votre-domaine.tld/vodio", False),
 ]
 
 FIELD_KEYS = {f[0] for f in FIELDS}
@@ -63,14 +66,16 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # interne différent de l'URL publique).
 HIDDEN_FROM_FORM = {"STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "WACUSTOM_URL", "WACUSTOM_CONFIG"}
 
-# (clé pseudo, clé URL réelle, clé config réelle, libellé, indice)
-COMPOSITE_FIELDS: list[tuple[str, str, str, str, str]] = [
+# (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)
+COMPOSITE_FIELDS: list[tuple[str, str, str, str, str, bool]] = [
     ("STREAM_CHECK_MANIFEST", "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG",
      "Manifest AIOStreams",
-     "Collez l'URL complète du manifest de votre compte AIOStreams (page /stremio/configure), ex. https://host/stremio/<uuid>/<config>/manifest.json"),
+     "Collez l'URL complète du manifest de votre compte AIOStreams (page /stremio/configure), ex. https://host/stremio/<uuid>/<config>/manifest.json",
+     True),
     ("WACUSTOM_MANIFEST", "WACUSTOM_URL", "WACUSTOM_CONFIG",
      "Manifest Wacustom",
-     "Collez l'URL complète de votre manifest Wacustom"),
+     "Collez l'URL complète de votre manifest Wacustom",
+     True),
 ]
 
 

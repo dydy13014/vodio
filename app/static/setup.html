@@ -37,6 +37,11 @@ input[type=text], input[type=password], input[type=number] {
 }
 input:focus { outline: none; border-color: var(--accent); }
 .field.required label::after { content: " *"; color: var(--accent-2); }
+.badge-reco {
+  display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.5rem; border-radius: 99px;
+  background: rgba(62, 207, 112, 0.15); color: var(--ok); font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle;
+}
 button {
   width: 100%; padding: 0.9rem; border-radius: 10px; border: none; cursor: pointer;
   background: var(--accent); color: #fff; font-weight: 700; font-size: 1rem;
@@ -53,7 +58,7 @@ a { color: var(--accent-2); }
 <div class="wrap">
   <h1>⚙️ VODIO — Configuration</h1>
   <p class="sub" id="subtitle">Chargement…</p>
-  <p class="legend"><span class="star">*</span> champ obligatoire — tout le reste est optionnel et peut rester vide, la fonctionnalité correspondante sera simplement désactivée.</p>
+  <p class="legend"><span class="star">*</span> champ obligatoire. Les champs marqués <span class="badge-reco" style="margin-left:0;">Recommandé</span> débloquent une fonctionnalité entière de l'appli — tout le reste peut rester vide sans problème.</p>
 
   <!-- Écran 1 : instance pas encore configurée -->
   <div id="setup-screen" class="hidden">
@@ -106,7 +111,7 @@ function fieldHTML(f, currentlySet) {
   const type = f.secret ? "password" : (/HOURS|PAGES|LIMIT|QUALITY_MIN/.test(f.key) ? "number" : "text");
   const placeholder = currentlySet ? "(déjà configuré — laisser vide pour ne pas changer)" : "";
   return `<div class="field ${f.required ? 'required' : ''}">
-    <label>${f.label}</label>
+    <label>${f.label}</label>${f.recommended ? '<span class="badge-reco">Recommandé</span>' : ''}
     ${f.hint ? `<span class="hint">${f.hint}</span>` : ""}
     <input type="${type}" data-key="${f.key}" placeholder="${placeholder}">
   </div>`;

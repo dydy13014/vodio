@@ -23,8 +23,8 @@ SETTINGS_FILE = Path(os.environ.get("SETTINGS_FILE", "/app/data/settings.json"))
 # cosmétique) — affiché avec un badge distinct de l'astérisque (réservé aux
 # champs strictement obligatoires) dans /setup.
 FIELDS: list[tuple[str, bool, bool, str, str, bool]] = [
-    ("TMDB_API_KEY", True, True, "Clé API TMDB", "Obligatoire — gratuite sur themoviedb.org/settings/api", False),
-    ("VODIO_PASSWORD", True, True, "Mot de passe watchlist", "Obligatoire — protège la page web et les API", False),
+    ("TMDB_API_KEY", True, True, "Clé API TMDB", "Obligatoire, gratuite sur themoviedb.org/settings/api", False),
+    ("VODIO_PASSWORD", True, True, "Mot de passe watchlist", "Obligatoire, protège la page web et les API", False),
     ("VODIO_DEFAULT_NAME", False, False, "Nom du compte principal", "Laisser vide pour se connecter avec le champ Nom vide", False),
     ("ALLOCINE_PAGES", False, False, "Pages AlloCiné scrapées", "Défaut : 5", False),
     ("REFRESH_HOURS", False, False, "Intervalle de rafraîchissement (heures)", "Défaut : 24", False),
@@ -49,7 +49,7 @@ FIELDS: list[tuple[str, bool, bool, str, str, bool]] = [
     ("VODIO_ADDON_ID", False, False, "Identifiant technique de l'addon", "À laisser vide dans la quasi totalité des cas. Utile seulement si vous installez plusieurs instances de VODIO (ex. une pour vous, une pour un ami) : donnez à chacune un ID différent pour éviter que Stremio les confonde. Défaut : org.selfhosted.vodio, ex. perso : org.monpseudo.vodio", False),
     ("VODIO_ADDON_NAME", False, False, "Nom affiché dans la liste des addons Stremio", "Défaut : VODIO. À changer seulement pour renommer l'addon ou distinguer plusieurs instances", False),
     ("RPDB_API_KEY", False, True, "Clé API RPDB (jaquettes avec note)", "Clé gratuite sur ratingposterdb.com", False),
-    ("VODIO_BASE_URL", False, False, "URL publique de cette instance", "requis pour RPDB — ex. https://votre-domaine.tld/vodio", False),
+    ("VODIO_BASE_URL", False, False, "URL publique de cette instance", "requis pour RPDB, ex. https://votre-domaine.tld/vodio", False),
     ("LUMIO_MANIFEST_ID", False, True, "Identifiant manifest Lumio", "Signal complémentaire pour la watchlist uniquement (quota trop bas pour le catalogue principal)", True),
 ]
 
@@ -86,7 +86,7 @@ HIDDEN_FROM_FORM = {
 COMPOSITE_FIELDS: list[tuple[str, str, str, str, str, bool]] = [
     ("STREAM_CHECK_MANIFEST", "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG",
      "Manifest AIOStreams",
-     "Sur votre instance AIOStreams : ouvrez /stremio/configure, configurez vos sources/proxy, puis récupérez l'URL de manifest générée à la fin (bouton « Installer » ou lien copiable) — collez-la ici. Format : https://host/stremio/<uuid>/<config>/manifest.json",
+     "Sur votre instance AIOStreams : ouvrez /stremio/configure, configurez vos sources/proxy, puis récupérez l'URL de manifest générée à la fin (bouton « Installer » ou lien copiable), collez-la ici. Format : https://host/stremio/<uuid>/<config>/manifest.json",
      True),
     ("WACUSTOM_MANIFEST", "WACUSTOM_URL", "WACUSTOM_CONFIG",
      "Manifest Wacustom",

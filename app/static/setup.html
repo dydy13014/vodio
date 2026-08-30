@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VODIO — Configuration</title>
+<title>VODIO - Configuration</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -58,9 +58,9 @@ a { color: var(--accent-2); }
 </head>
 <body>
 <div class="wrap">
-  <h1>⚙️ VODIO — Configuration</h1>
+  <h1>⚙️ VODIO - Configuration</h1>
   <p class="sub" id="subtitle">Chargement…</p>
-  <p class="legend"><span class="star">*</span> champ obligatoire. Les champs marqués <span class="badge-reco" style="margin-left:0;">Recommandé</span> débloquent une fonctionnalité entière de l'appli — tout le reste peut rester vide sans problème.</p>
+  <p class="legend"><span class="star">*</span> champ obligatoire. Les champs marqués <span class="badge-reco" style="margin-left:0;">Recommandé</span> débloquent une fonctionnalité entière de l'appli - tout le reste peut rester vide sans problème.</p>
 
   <!-- Écran 1 : instance pas encore configurée -->
   <div id="setup-screen" class="hidden">
@@ -127,7 +127,7 @@ let editToken = null;
 const QUALITY_OPTIONS = [
   ["0", "Aucun filtre (CAM/TS inclus)"],
   ["480", "480p"],
-  ["720", "720p (recommandé — exclut CAM/TS)"],
+  ["720", "720p (recommandé - exclut CAM/TS)"],
   ["1080", "1080p"],
   ["1440", "1440p"],
   ["2160", "2160p (4K)"],
@@ -139,13 +139,13 @@ function fieldHTML(f, currentlySet) {
       <label>${f.label}</label>${f.recommended ? '<span class="badge-reco">Recommandé</span>' : ''}
       ${f.hint ? `<span class="hint">${f.hint}</span>` : ""}
       <select data-key="${f.key}">
-        <option value="">${currentlySet ? "(déjà configuré — garder l'actuel)" : "Défaut : 720p"}</option>
+        <option value="">${currentlySet ? "(déjà configuré - garder l'actuel)" : "Défaut : 720p"}</option>
         ${QUALITY_OPTIONS.map(([v, label]) => `<option value="${v}">${label}</option>`).join("")}
       </select>
     </div>`;
   }
   const type = f.secret ? "password" : (/HOURS|PAGES|LIMIT/.test(f.key) ? "number" : "text");
-  const placeholder = currentlySet ? "(déjà configuré — laisser vide pour ne pas changer)" : "";
+  const placeholder = currentlySet ? "(déjà configuré - laisser vide pour ne pas changer)" : "";
   return `<div class="field ${f.required ? 'required' : ''}">
     <label>${f.label}</label>${f.recommended ? '<span class="badge-reco">Recommandé</span>' : ''}
     ${f.hint ? `<span class="hint">${f.hint}</span>` : ""}
@@ -246,11 +246,11 @@ async function submitForm(isEdit) {
     const data = await r.json();
     msg.className = "msg ok";
     if (!data.restart_required) {
-      msg.textContent = "✅ Utilisateurs mis à jour — déjà actif, aucun redémarrage nécessaire.";
+      msg.textContent = "✅ Utilisateurs mis à jour - déjà actif, aucun redémarrage nécessaire.";
     } else if (data.users_applied_live) {
       msg.textContent = "✅ Utilisateurs déjà actifs. Le reste de la configuration nécessite un redémarrage du conteneur pour s'appliquer (docker compose restart).";
     } else {
-      msg.textContent = "✅ Configuration enregistrée — redémarrez le conteneur pour l'appliquer (docker compose restart).";
+      msg.textContent = "✅ Configuration enregistrée - redémarrez le conteneur pour l'appliquer (docker compose restart).";
     }
   } else {
     const data = await r.json().catch(() => ({}));
@@ -294,12 +294,12 @@ async function init() {
   const r = await fetch(`${BASE}/api/setup/status`);
   const { configured } = await r.json();
   if (!configured) {
-    document.getElementById("subtitle").textContent = "Première configuration — entrez le code affiché dans les logs, puis remplissez les champs voulus.";
+    document.getElementById("subtitle").textContent = "Première configuration - entrez le code affiché dans les logs, puis remplissez les champs voulus.";
     renderForm("fields", {});
     initUsersState("fields", []);
     document.getElementById("setup-screen").classList.remove("hidden");
   } else {
-    document.getElementById("subtitle").textContent = "Instance déjà configurée — connectez-vous en tant que compte principal pour modifier.";
+    document.getElementById("subtitle").textContent = "Instance déjà configurée - connectez-vous en tant que compte principal pour modifier.";
     document.getElementById("login-screen").classList.remove("hidden");
   }
 }

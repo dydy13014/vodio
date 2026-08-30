@@ -218,8 +218,15 @@ async function submitForm(isEdit) {
   const r = await fetch(`${BASE}/api/setup`, { method: "POST", headers, body: JSON.stringify(body) });
   const msg = document.getElementById(msgId);
   if (r.ok) {
+    const data = await r.json();
     msg.className = "msg ok";
-    msg.textContent = "✅ Configuration enregistrée — redémarrez le conteneur pour l'appliquer (docker compose restart).";
+    if (!data.restart_required) {
+      msg.textContent = "✅ Utilisateurs mis à jour — déjà actif, aucun redémarrage nécessaire.";
+    } else if (data.users_applied_live) {
+      msg.textContent = "✅ Utilisateurs déjà actifs. Le reste de la configuration nécessite un redémarrage du conteneur pour s'appliquer (docker compose restart).";
+    } else {
+      msg.textContent = "✅ Configuration enregistrée — redémarrez le conteneur pour l'appliquer (docker compose restart).";
+    }
   } else {
     const data = await r.json().catch(() => ({}));
     msg.className = "msg err";

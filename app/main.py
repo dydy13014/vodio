@@ -177,6 +177,34 @@ if VODIO_DEFAULT_NAME in EXTRA_USERS:
 USERS.update(EXTRA_USERS)
 
 
+def _add_or_update_extra_user(name: str, password: str) -> None:
+    """Applique tout de suite (pas besoin de redémarrer, contrairement au
+    reste de /setup) : EXTRA_USERS/USERS/ALL_WATCHLISTS sont de simples
+    dicts/liste en mémoire, pas des constantes figées à l'import."""
+    if name in EXTRA_USERS:
+        EXTRA_USERS[name]["password"] = password
+    else:
+        wl = Watchlist(str(Path(WATCHLIST_FILE).parent / f"watchlist_{name}.json"))
+        EXTRA_USERS[name] = {"password": password, "watchlist": wl}
+        ALL_WATCHLISTS.append((name, wl, name not in NOSMS_USERS))
+    USERS[name] = EXTRA_USERS[name]
+
+
+def _remove_extra_user(name: str) -> None:
+    entry = EXTRA_USERS.pop(name, None)
+    USERS.pop(name, None)
+    idx = next((i for i, (label, _wl, _sms) in enumerate(ALL_WATCHLISTS) if label == name), None)
+    if idx is not None:
+        ALL_WATCHLISTS.pop(idx)
+    if entry is not None:
+        # Révoque les sessions déjà ouvertes sur ce compte (sans ça, un
+        # jeton existant continuerait de fonctionner jusqu'à expiration).
+        wl = entry["watchlist"]
+        for token, session in list(SESSIONS.items()):
+            if session["watchlist"] is wl:
+                SESSIONS.pop(token, None)
+
+
 def load_cache() -> None:
     if DATA_FILE.exists():
         try:
@@ -731,9 +759,34 @@ async def api_setup_save(payload: dict, authorization: str = Header(default=""))
     else:
         _require_admin(authorization)
     settings_store.save_settings(fields)
+    users_applied_live = False
     if users_entries is not None:
-        settings_store.set_field("VODIO_EXTRA_USERS", settings_store.merge_extra_users(users_entries))
-    return {"ok": True, "restart_required": True}
+        if SETUP_NEEDED:
+            # Le reste de la config (TMDB/mot de passe) exige de toute façon
+            # un redémarrage avant que l'instance soit utilisable — inutile
+            # d'appliquer les comptes en direct dans cet état transitoire.
+            settings_store.set_field("VODIO_EXTRA_USERS", settings_store.merge_extra_users(users_entries))
+        else:
+            submitted_names = {n for e in users_entries if (n := (e.get("name") or "").strip())}
+            for name in list(EXTRA_USERS.keys()):
+                if name not in submitted_names:
+                    _remove_extra_user(name)
+            for entry in users_entries:
+                name = (entry.get("name") or "").strip()
+                password = (entry.get("password") or "").strip()
+                if not name or not password:
+                    continue  # nom vide, ou compte existant dont le mot de passe reste inchangé
+                _add_or_update_extra_user(name, password)
+            settings_store.set_field(
+                "VODIO_EXTRA_USERS",
+                settings_store.serialize_users({n: u["password"] for n, u in EXTRA_USERS.items()}),
+            )
+            users_applied_live = True
+    # "Enregistré et déjà actif" seulement si les utilisateurs étaient le
+    # SEUL changement soumis (fields vide après en avoir retiré l'entrée
+    # VODIO_EXTRA_USERS_ENTRIES) — tout le reste exige un redémarrage.
+    restart_required = bool(fields) or not users_applied_live
+    return {"ok": True, "restart_required": restart_required, "users_applied_live": users_applied_live}
 
 
 # ── Page web de gestion + assets PWA (partagés, une seule URL pour tous) ────

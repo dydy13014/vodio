@@ -459,8 +459,34 @@ async function logout() {
 
 function copyManifestUrl() {
   const url = `${location.origin}${BASE}/manifest.json`;
-  navigator.clipboard.writeText(url);
-  toast("Lien copié — à coller dans Stremio (Addons > URL du manifest)");
+  // navigator.clipboard exige HTTPS (ou localhost) — indisponible en HTTP
+  // simple (déploiement LAN direct sans reverse-proxy), d'où le repli.
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(url).then(
+      () => toast("Lien copié — à coller dans Stremio (Addons > URL du manifest)"),
+      () => fallbackCopy(url)
+    );
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let copied = false;
+  try { copied = document.execCommand("copy"); } catch (e) {}
+  document.body.removeChild(ta);
+  if (copied) {
+    toast("Lien copié — à coller dans Stremio (Addons > URL du manifest)");
+  } else {
+    prompt("Copiez ce lien et collez-le dans Stremio (Addons > URL du manifest) :", text);
+  }
 }
 
 function toast(msg) {

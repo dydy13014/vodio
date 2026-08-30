@@ -697,9 +697,17 @@ async def api_setup_current(_: None = Depends(_require_admin)):
     return status
 
 
+@app.get("/api/setup/users")
+async def api_setup_users(_: None = Depends(_require_admin)):
+    """Noms des comptes additionnels actuellement actifs (jamais les mots de
+    passe) — sert à afficher la liste éditable dans /setup."""
+    return {"users": list(EXTRA_USERS.keys())}
+
+
 @app.post("/api/setup")
 async def api_setup_save(payload: dict, authorization: str = Header(default="")):
     fields = dict(payload.get("fields") or {})
+    users_entries = fields.pop("VODIO_EXTRA_USERS_ENTRIES", None)
     for composite_key, url_key, cfg_key, *_rest in settings_store.COMPOSITE_FIELDS:
         raw = fields.pop(composite_key, None)
         if raw:
@@ -723,6 +731,8 @@ async def api_setup_save(payload: dict, authorization: str = Header(default=""))
     else:
         _require_admin(authorization)
     settings_store.save_settings(fields)
+    if users_entries is not None:
+        settings_store.set_field("VODIO_EXTRA_USERS", settings_store.merge_extra_users(users_entries))
     return {"ok": True, "restart_required": True}
 
 

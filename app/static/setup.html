@@ -71,6 +71,12 @@ a { color: var(--accent-2); }
       </div>
     </div>
     <div id="fields"></div>
+    <div class="card">
+      <h2>Utilisateurs additionnels</h2>
+      <p class="hint" style="margin-bottom:1rem;">Chaque personne a sa propre watchlist et son propre mot de passe, choisis dans le formulaire de connexion (champ Nom). Laissez vide si vous êtes seul utilisateur.</p>
+      <div id="users-rows-fields"></div>
+      <button type="button" class="btn-ghost" style="margin-top:0.5rem;" onclick="addUserRow('fields')">+ Ajouter un utilisateur</button>
+    </div>
     <button onclick="submitForm(false)">Enregistrer</button>
     <p class="msg" id="setupMsg"></p>
   </div>
@@ -96,6 +102,12 @@ a { color: var(--accent-2); }
   <!-- Écran 3 : édition (déjà connecté en admin) -->
   <div id="edit-screen" class="hidden">
     <div id="editFields"></div>
+    <div class="card">
+      <h2>Utilisateurs additionnels</h2>
+      <p class="hint" style="margin-bottom:1rem;">Chaque personne a sa propre watchlist et son propre mot de passe, choisis dans le formulaire de connexion (champ Nom). Retirer un compte ici le supprime après redémarrage.</p>
+      <div id="users-rows-editFields"></div>
+      <button type="button" class="btn-ghost" style="margin-top:0.5rem;" onclick="addUserRow('editFields')">+ Ajouter un utilisateur</button>
+    </div>
     <button onclick="submitForm(true)">Enregistrer</button>
     <p class="msg" id="editMsg"></p>
     <p style="margin-top:1.5rem;"><a href="/">← Retour à l'application</a></p>
@@ -129,7 +141,7 @@ function renderForm(containerId, currentState) {
     "Nouveautés Torrent (Torznab)": FIELDS.filter(f => ["C411_URL","C411_API_KEY","TR4KER_URL","TR4KER_API_KEY","V3X_URL","V3X_API_KEY"].includes(f.key)),
     "Watchlist enrichie (Lumio)": FIELDS.filter(f => ["LUMIO_MANIFEST"].includes(f.key)),
     "Jaquettes RPDB": FIELDS.filter(f => ["RPDB_API_KEY","VODIO_BASE_URL"].includes(f.key)),
-    "Multi-utilisateurs & SMS": FIELDS.filter(f => ["VODIO_EXTRA_USERS","VODIO_NOSMS_USERS","VODIO_SMS_USER","VODIO_SMS_PASS"].includes(f.key)),
+    "SMS de disponibilité": FIELDS.filter(f => ["VODIO_NOSMS_USERS","VODIO_SMS_USER","VODIO_SMS_PASS"].includes(f.key)),
     "Personnalisation": FIELDS.filter(f => ["VODIO_DEFAULT_NAME","ALLOCINE_PAGES","REFRESH_HOURS","VODIO_ADDON_ID","VODIO_ADDON_NAME"].includes(f.key)),
   };
   let html = "";
@@ -148,10 +160,54 @@ function collectForm(containerId) {
   return out;
 }
 
+// Utilisateurs additionnels — formulaire dédié (liste + ajout/suppression)
+// plutôt qu'un champ texte "nom:motdepasse,..." à éditer à la main.
+const usersState = { fields: [], editFields: [] };
+
+function initUsersState(scope, existingNames) {
+  usersState[scope] = existingNames.map(name => ({ name, password: "", existing: true }));
+  renderUsersRows(scope);
+}
+
+function userRowHTML(scope, idx, entry) {
+  const nameAttr = entry.existing ? "readonly" : "";
+  const pwdPlaceholder = entry.existing ? "Nouveau mot de passe (laisser vide pour garder l'actuel)" : "Mot de passe";
+  return `<div style="display:flex; gap:0.5rem; margin-bottom:0.6rem; align-items:center;">
+    <input type="text" value="${entry.name}" placeholder="Nom" ${nameAttr}
+      oninput="usersState.${scope}[${idx}].name=this.value" style="margin-bottom:0; flex:1;">
+    <input type="password" placeholder="${pwdPlaceholder}"
+      oninput="usersState.${scope}[${idx}].password=this.value" style="margin-bottom:0; flex:1;">
+    <button type="button" onclick="removeUserRow('${scope}',${idx})"
+      style="width:auto; padding:0.6rem 0.9rem; background:transparent; border:1px solid var(--border); color:var(--danger);">✕</button>
+  </div>`;
+}
+
+function renderUsersRows(scope) {
+  document.getElementById(`users-rows-${scope}`).innerHTML =
+    usersState[scope].map((e, i) => userRowHTML(scope, i, e)).join("") || `<p class="hint">Aucun utilisateur additionnel.</p>`;
+}
+
+function addUserRow(scope) {
+  usersState[scope].push({ name: "", password: "", existing: false });
+  renderUsersRows(scope);
+}
+
+function removeUserRow(scope, idx) {
+  usersState[scope].splice(idx, 1);
+  renderUsersRows(scope);
+}
+
+function collectUsersEntries(scope) {
+  return usersState[scope]
+    .filter(e => e.name.trim())
+    .map(e => ({ name: e.name.trim(), password: e.password }));
+}
+
 async function submitForm(isEdit) {
   const containerId = isEdit ? "editFields" : "fields";
   const msgId = isEdit ? "editMsg" : "setupMsg";
   const fields = collectForm(containerId);
+  fields.VODIO_EXTRA_USERS_ENTRIES = collectUsersEntries(containerId);
   const body = { fields };
   const headers = { "Content-Type": "application/json" };
   if (isEdit) {
@@ -194,6 +250,9 @@ async function doLogin() {
   }
   const currentState = await cr.json();
   renderForm("editFields", currentState);
+  const ur = await fetch(`${BASE}/api/setup/users`, { headers: { "Authorization": `Bearer ${editToken}` } });
+  const { users } = ur.ok ? await ur.json() : { users: [] };
+  initUsersState("editFields", users);
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("edit-screen").classList.remove("hidden");
 }
@@ -205,6 +264,7 @@ async function init() {
   if (!configured) {
     document.getElementById("subtitle").textContent = "Première configuration — entrez le code affiché dans les logs, puis remplissez les champs voulus.";
     renderForm("fields", {});
+    initUsersState("fields", []);
     document.getElementById("setup-screen").classList.remove("hidden");
   } else {
     document.getElementById("subtitle").textContent = "Instance déjà configurée — connectez-vous en tant que compte principal pour modifier.";

@@ -73,10 +73,14 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # via un vrai .env (cf. .env.example) pour qui sait ce qu'il fait.
 # LUMIO_MANIFEST_ID en plus : remplacé par un champ "coller l'URL" comme
 # AIOStreams (cf. SINGLE_MANIFEST_FIELDS), même logique de simplification.
+# VODIO_EXTRA_USERS en plus : remplacé par un vrai formulaire (liste des
+# comptes + ajout/suppression) plutôt qu'un champ texte "nom:motdepasse,..."
+# à éditer à la main (cf. merge_extra_users + section dédiée dans setup.html).
 HIDDEN_FROM_FORM = {
     "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "VODIO_ADDON_ID",
     "WACUSTOM_URL", "WACUSTOM_CONFIG", "ALLDEBRID_API_KEY",
     "MEDIAFLOW_URL", "MEDIAFLOW_API_PASSWORD", "LUMIO_MANIFEST_ID",
+    "VODIO_EXTRA_USERS",
 }
 
 # (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)
@@ -190,6 +194,17 @@ def get_or_create_setup_code() -> str:
     return code
 
 
+def set_field(key: str, value: str) -> None:
+    """Écrase la valeur d'une clé sans le garde-fou « ignore si vide » de
+    `save_settings` — nécessaire pour VODIO_EXTRA_USERS : supprimer le
+    dernier compte additionnel doit pouvoir vider le champ, pas le laisser
+    inchangé (contrairement à un champ secret vide qui, lui, signifie « ne
+    pas changer »)."""
+    data = load()
+    data[key] = value
+    save(data)
+
+
 def save_settings(fields: dict) -> None:
     """Enregistre les champs non vides du formulaire (ignore les champs
     vides pour ne pas écraser une valeur déjà en place — un champ secret
@@ -200,3 +215,40 @@ def save_settings(fields: dict) -> None:
         if value:
             data[key] = value.strip() if isinstance(value, str) else value
     save(data)
+
+
+def parse_users_string(raw: str) -> dict[str, str]:
+    """VODIO_EXTRA_USERS=nom1:motdepasse1,nom2:motdepasse2 → {nom: motdepasse}."""
+    users: dict[str, str] = {}
+    for pair in (raw or "").split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
+            continue
+        name, pwd = pair.split(":", 1)
+        name, pwd = name.strip(), pwd.strip()
+        if name and pwd:
+            users[name] = pwd
+    return users
+
+
+def serialize_users(users: dict[str, str]) -> str:
+    return ",".join(f"{name}:{pwd}" for name, pwd in users.items())
+
+
+def merge_extra_users(entries: list[dict]) -> str:
+    """Reconstruit VODIO_EXTRA_USERS à partir d'une liste [{"name", "password"}]
+    envoyée par le formulaire /setup : un mot de passe vide pour un nom déjà
+    existant garde son ancien mot de passe (on ne renvoie jamais les mots de
+    passe existants au client) ; un nom absent de `entries` est supprimé."""
+    current = parse_users_string(os.environ.get("VODIO_EXTRA_USERS", ""))
+    result: dict[str, str] = {}
+    for entry in entries:
+        name = (entry.get("name") or "").strip()
+        password = (entry.get("password") or "").strip()
+        if not name:
+            continue
+        if not password:
+            password = current.get(name, "")
+        if password:
+            result[name] = password
+    return serialize_users(result)

@@ -28,11 +28,11 @@ FIELDS: list[tuple[str, bool, bool, str, str, bool]] = [
     ("VODIO_DEFAULT_NAME", False, False, "Nom du compte principal", "Laisser vide pour se connecter avec le champ Nom vide", False),
     ("ALLOCINE_PAGES", False, False, "Pages AlloCiné scrapées", "Défaut : 5", False),
     ("REFRESH_HOURS", False, False, "Intervalle de rafraîchissement (heures)", "Défaut : 24", False),
-    ("C411_URL", False, False, "URL Torznab C411", "ex. https://c411.org/api", True),
+    ("C411_URL", False, False, "URL de l'API Torznab de C411", "URL de l'API fournie par votre compte C411", True),
     ("C411_API_KEY", False, True, "Clé API C411", "Trouvée sur votre profil/compte C411, section API", True),
-    ("TR4KER_URL", False, False, "URL Torznab Tr4ker", "ex. https://tr4ker.net/api", False),
+    ("TR4KER_URL", False, False, "URL de l'API Torznab de Tr4ker", "URL de l'API fournie par votre compte Tr4ker", False),
     ("TR4KER_API_KEY", False, True, "Clé API Tr4ker", "Trouvée sur votre profil/compte Tr4ker, section API", False),
-    ("V3X_URL", False, False, "URL Torznab V3X", "ex. https://api.v3x.club/torznab/api", False),
+    ("V3X_URL", False, False, "URL de l'API Torznab de V3X", "URL de l'API fournie par votre compte V3X", False),
     ("V3X_API_KEY", False, True, "Clé API V3X", "Trouvée sur votre profil/compte V3X, section API", False),
     ("STREAM_CHECK_URL", False, False, "URL interne de votre AIOStreams", "ex. http://aiostreams:3000", False),
     ("STREAM_CHECK_CONFIG", False, True, "Config AIOStreams", "stremio/<uuid>/<credentials-chiffrés>", False),
@@ -72,13 +72,14 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # VODIO_EXTRA_USERS : remplacé par un vrai formulaire (liste des comptes +
 # ajout/suppression) plutôt qu'un champ texte "nom:motdepasse,..." à éditer
 # à la main (cf. merge_extra_users + section dédiée dans setup.html).
-# C411_URL/TR4KER_URL/V3X_URL : ce sont des adresses fixes, identiques pour
-# tout le monde (déjà en défaut dans main.py) — seule la clé API diffère
-# réellement d'un utilisateur à l'autre, donc masquées ici.
+# C411_URL/TR4KER_URL/V3X_URL restent affichées (pas de défaut, pas
+# d'exemple d'adresse réelle nulle part dans ce repo public) : c'est à
+# chaque utilisateur de connaître et fournir l'adresse de son propre
+# tracker, décision explicite (ces trackers ne sont pas forcément publics).
 HIDDEN_FROM_FORM = {
     "STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "VODIO_ADDON_ID",
     "WACUSTOM_URL", "WACUSTOM_CONFIG", "LUMIO_MANIFEST_ID",
-    "VODIO_EXTRA_USERS", "C411_URL", "TR4KER_URL", "V3X_URL",
+    "VODIO_EXTRA_USERS",
 }
 
 # (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)

@@ -64,7 +64,9 @@ FIELD_KEYS = {f[0] for f in FIELDS}
 # l'URL. Édition manuelle des deux champs toujours possible via un vrai
 # fichier .env (cf. .env.example) pour les cas avancés (ex. host Docker
 # interne différent de l'URL publique).
-HIDDEN_FROM_FORM = {"STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "WACUSTOM_URL", "WACUSTOM_CONFIG"}
+# VODIO_ADDON_ID en plus : généré automatiquement (cf. apply_to_environ),
+# rien à saisir dans l'immense majorité des cas.
+HIDDEN_FROM_FORM = {"STREAM_CHECK_URL", "STREAM_CHECK_CONFIG", "WACUSTOM_URL", "WACUSTOM_CONFIG", "VODIO_ADDON_ID"}
 
 # (clé pseudo, clé URL réelle, clé config réelle, libellé, indice, recommandé)
 COMPOSITE_FIELDS: list[tuple[str, str, str, str, str, bool]] = [
@@ -119,9 +121,24 @@ def apply_to_environ() -> None:
     """À appeler avant toute autre lecture de configuration (premier import
     de main.py) : préremplit os.environ avec les valeurs stockées, pour les
     clés pas déjà définies par le vrai environnement."""
-    for key, value in load().items():
+    data = load()
+    for key, value in data.items():
         if key in FIELD_KEYS and value and key not in os.environ:
             os.environ[key] = str(value)
+
+    # ID d'addon : généré automatiquement une seule fois puis figé (jamais
+    # régénéré), pour distinguer deux instances différentes sans demander à
+    # l'utilisateur de choisir/comprendre un identifiant technique. Une vraie
+    # variable d'environnement (déploiement répliqué volontairement sur
+    # plusieurs machines avec le même ID, ex. bascule prod/standby) garde
+    # toujours la priorité.
+    if "VODIO_ADDON_ID" not in os.environ:
+        addon_id = data.get("VODIO_ADDON_ID")
+        if not addon_id:
+            addon_id = f"org.selfhosted.vodio-{secrets.token_hex(4)}"
+            data["VODIO_ADDON_ID"] = addon_id
+            save(data)
+        os.environ["VODIO_ADDON_ID"] = addon_id
 
 
 def is_configured() -> bool:

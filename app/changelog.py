@@ -5,9 +5,21 @@ développement actif (consigne explicite du 2026-08-14). Nouvelle entrée en
 tête de liste à chaque changement notable ; le changelog reprend aussi
 l'historique des fonctionnalités livrées avant la création de cet onglet."""
 
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 
 CHANGELOG = [
+    {
+        "version": "0.16.0",
+        "date": "2026-08-30",
+        "changes": [
+            "Configuration par page web (/setup puis /admin) : plus besoin d'éditer de fichier, un code s'affiche dans les logs au premier démarrage puis un formulaire couvre toute la configuration",
+            "Manifest AIOStreams et Wacustom simplifiés : une seule URL à coller (au lieu de deux champs séparés à démêler soi-même)",
+            "Utilisateurs additionnels : vrai formulaire (liste + ajout/suppression) à la place d'un champ texte à formater à la main, effectif immédiatement sans redémarrage",
+            "Résolution minimale des badges en liste déroulante plutôt qu'un champ libre",
+            "Watchlist enrichie via Lumio (signal complémentaire de disponibilité), désormais configurable",
+            "Verrou anti-brute-force sur la connexion (blocage temporaire après plusieurs échecs)",
+        ],
+    },
     {
         "version": "0.15.0",
         "date": "2026-08-30",

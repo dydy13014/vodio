@@ -43,10 +43,11 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
-from . import alldebrid, availability, c411_feed, changelog, cinema_scraper, notify, scraper, tmdb
+from . import alldebrid, availability, c411_feed, changelog, cinema_scraper, log_redact, notify, scraper, tmdb
 from .watchlist import Watchlist
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+log_redact.install()
 log = logging.getLogger("vodio")
 
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")

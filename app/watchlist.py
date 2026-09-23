@@ -197,7 +197,8 @@ class Watchlist:
     def replace_all(self, metas: list[dict]) -> None:
         """Remplace les entrées (mêmes ids) après recalcul des badges. `metas`
         sont des copies (cf. `_strip_badge`) — sans ce report explicite,
-        `eta_days` calculé dessus serait perdu au lieu d'être persisté."""
+        `eta_days`/`pending_notify` calculés dessus seraient perdus au lieu
+        d'être persistés."""
         by_id = {m["id"]: m for m in metas}
         for i in self.items:
             m = by_id.get(i["id"])
@@ -207,4 +208,10 @@ class Watchlist:
                     i["eta_days"] = m["eta_days"]
                 else:
                     i.pop("eta_days", None)
+                # Anti-doublon SMS (2026-09-22, cf. main.py) : confirmation
+                # de disponibilité en attente pour le prochain refresh.
+                if m.get("pending_notify"):
+                    i["pending_notify"] = True
+                else:
+                    i.pop("pending_notify", None)
         self._save()

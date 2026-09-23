@@ -290,28 +290,74 @@ async def _badge_watchlist(metas: list[dict]) -> None:
         await _badge(metas)
 
 
+WATCHLIST_REGRESSION_RETRY_DELAY_S = 20
+
+
 async def _refresh_watchlist_badges(label: str, wl: Watchlist, sms: bool = True) -> None:
     """Rafraîchit les badges d'une watchlist + SMS sur les passages ⏳ → 🧲.
     `label` (nom d'utilisateur, vide pour le défaut) préfixe le SMS pour
     distinguer qui a un titre dispo — toutes les watchlists partagent le
     même numéro Free Mobile. `sms=False` (VODIO_NOSMS_USERS) désactive
     uniquement la notification, pas le calcul des badges."""
-    current = wl.metas()  # non vus, avec les anciens badges
+    current = wl.metas()  # non vus, avec les anciens badges (+ pending_notify persisté)
     was_available = {m["id"]: availability._is_available_name(m["name"]) for m in current}
+    was_pending = {m["id"]: bool(m.get("pending_notify")) for m in current}
     items = [_strip_badge(m) for m in current]
     if not items:
         return
     await _badge_watchlist(items)
+    # Anti-flicker (2026-09-17) : contrairement au catalogue AlloCiné
+    # (add_availability_badges, 2 passages anti-cache-froid), le check
+    # watchlist interroge Wacustom en direct sans filet de sécurité — un
+    # hoquet ponctuel (timeout, 429 Torznab non throttlé)
+    # peut faire redescendre à tort un
+    # titre déjà dispo à ⏳, sans SMS à la descente ; au refresh suivant il
+    # remonte à ✅ et redéclenche un SMS "nouvelle dispo" en double. On
+    # revérifie donc une fois, avant de persister, tout titre qui régresse
+    # (dispo au refresh précédent, plus dispo à ce passage) plutôt que
+    # d'accepter tel quel un vrai/faux négatif.
+    regressed = [
+        m for m in items
+        if was_available.get(m["id"]) and not availability._is_available_name(m["name"])
+    ]
+    if regressed:
+        await asyncio.sleep(WATCHLIST_REGRESSION_RETRY_DELAY_S)
+        recheck = [_strip_badge(m) for m in regressed]
+        await _badge_watchlist(recheck)
+        by_id = {m["id"]: m for m in recheck}
+        items = [by_id.get(m["id"], m) for m in items]
+
+    # Anti-doublon inter-refresh (2026-09-22) : l'anti-flicker ci-dessus ne
+    # couvre qu'une régression survenant PENDANT le même refresh. Un titre
+    # qui redescend à ⏳ un jour donné (sans SMS : la descente n'est jamais
+    # notifiée) puis remonte à ✅ le lendemain redéclenchait un 2e SMS
+    # "nouvelle dispo" pour un titre que l'utilisateur savait déjà disponible.
+    # On n'envoie donc plus le SMS dès la 1ʳᵉ apparition de 🧲 : on marque le
+    # titre `pending_notify` et on attend confirmation au refresh SUIVANT
+    # (24h plus tard) — s'il est toujours dispo, on notifie et on lève le
+    # flag ; s'il a entre-temps disparu, le flag retombe sans jamais avoir
+    # notifié. Le badge affiché à l'utilisateur (Stremio) n'est PAS retardé,
+    # seul le SMS l'est (décalage d'un cycle, ~24h, pour une 1ʳᵉ apparition).
+    to_notify = []
+    for m in items:
+        avail_now = availability._is_available_name(m["name"])
+        if avail_now and was_pending.get(m["id"]):
+            to_notify.append(dict(m))
+            m["pending_notify"] = False
+        elif avail_now and not was_available.get(m["id"]):
+            m["pending_notify"] = True
+        elif not avail_now:
+            m["pending_notify"] = False
+
     wl.replace_all(items)
     log.info("watchlist%s : badges rafraîchis (%d titres)", f" ({label})" if label else "", len(items))
     if not sms:
         return
-    for m in items:
-        if availability._is_available_name(m["name"]) and not was_available.get(m["id"]):
-            title = _strip_badge(m)["name"]
-            prefix = f"VODIO ({label})" if label else "VODIO"
-            await notify.send_sms(f"{prefix} : « {title} » est dispo ! 🧲")
-            log.info("SMS envoyé : %s dispo", title)
+    for m in to_notify:
+        title = _strip_badge(m)["name"]
+        prefix = f"VODIO ({label})" if label else "VODIO"
+        await notify.send_sms(f"{prefix} : « {title} » est dispo ! 🧲")
+        log.info("SMS envoyé : %s dispo", title)
 
 
 async def refresh() -> None:

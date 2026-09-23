@@ -132,6 +132,19 @@ state_c411 = {"metas": [], "last_refresh": 0.0, "last_error": ""}
 watchlist = Watchlist(WATCHLIST_FILE)
 
 
+# Audit sécurité 2026-09-15 : `name` finit dans un chemin de fichier
+# (`watchlist_<name>.json`) — sans cette contrainte, un nom contenant `../`
+# permettait en théorie d'écrire en dehors de `/app/data` (CWE-22).
+_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+
+_BTIH_RE = re.compile(r"urn:btih:([a-fA-F0-9]{32,40})", re.IGNORECASE)
+
+
+def _magnet_infohash(magnet: str) -> str | None:
+    m = _BTIH_RE.search(magnet)
+    return m.group(1).lower() if m else None
+
+
 def _parse_extra_users(raw: str, data_dir: Path) -> dict[str, dict]:
     """`VODIO_EXTRA_USERS=nom1:motdepasse1,nom2:motdepasse2` — chaque nom
     obtient sa propre watchlist (`watchlist_<nom>.json`) et son propre mot de
@@ -147,6 +160,9 @@ def _parse_extra_users(raw: str, data_dir: Path) -> dict[str, dict]:
         name = name.strip()
         pwd = pwd.strip()
         if not name or not pwd:
+            continue
+        if not _NAME_RE.match(name):
+            log.warning("VODIO_EXTRA_USERS : nom rejeté (caractères invalides) : %r", name)
             continue
         users[name] = {"password": pwd, "watchlist": Watchlist(str(data_dir / f"watchlist_{name}.json"))}
     return users
@@ -569,33 +585,36 @@ def _check_credentials(name: str, password: str) -> Watchlist | None:
     return account["watchlist"]
 
 
-# Anti brute-force sur /api/login (2026-08-30) — un déploiement public n'a
-# pas forcément de fail2ban/reverse-proxy en amont, contrairement à une
-# instance déjà protégée par ailleurs. Verrou en mémoire par IP : 5 échecs
-# → 15 min de blocage. ⚠️ `request.client.host` est l'IP du reverse-proxy
-# si l'appli tourne derrière un (Traefik, Nginx…) sans transmission fiable
-# de l'IP réelle — dans ce cas, toutes les requêtes semblent venir de la
-# même IP et un seul acteur malveillant peut bloquer tout le monde. Pas de
-# lecture de X-Forwarded-For ici (falsifiable si non filtré par le proxy) ;
-# pour une exposition sérieuse, préférer un vrai rate-limit côté proxy.
+# Anti brute-force sur /api/login (2026-08-30, revu 2026-09-15 — audit
+# sécurité) — un déploiement public n'a pas forcément de fail2ban/reverse-proxy
+# en amont, contrairement à une instance déjà protégée par ailleurs. Verrou en
+# mémoire : 5 échecs → 15 min de blocage. Initialement keyé sur
+# `request.client.host` : derrière Traefik (sans `--proxy-headers`) cette IP
+# est celle du conteneur Traefik, CONSTANTE pour tout le trafic WAN — un seul
+# visiteur anonyme suffisait donc à verrouiller la connexion de tous les
+# comptes en même temps. Keyé sur le nom de
+# compte tenté à la place : borne le blast radius à UN SEUL compte par
+# attaquant (les noms de compte ne sont pas secrets),
+# sans dépendre de la confiance accordée à un header transmis par le proxy
+# (falsifiable si mal filtré) ni de la topologie réseau exacte.
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCKOUT_S = 15 * 60
-_LOGIN_ATTEMPTS: dict[str, dict] = {}  # ip -> {"count", "locked_until", "last_attempt"}
+_LOGIN_ATTEMPTS: dict[str, dict] = {}  # nom de compte tenté -> {"count", "locked_until", "last_attempt"}
 
 
-def _login_rate_limited(ip: str) -> bool:
-    entry = _LOGIN_ATTEMPTS.get(ip)
+def _login_rate_limited(key: str) -> bool:
+    entry = _LOGIN_ATTEMPTS.get(key)
     return bool(entry and entry["locked_until"] > time.time())
 
 
-def _register_login_failure(ip: str) -> None:
+def _register_login_failure(key: str) -> None:
     now = time.time()
     # Purge opportuniste (même principe que SESSIONS ci-dessous) : sans ça
-    # la table grossit indéfiniment au fil des IPs qui échouent puis partent.
-    for old_ip, e in list(_LOGIN_ATTEMPTS.items()):
+    # la table grossit indéfiniment au fil des noms qui échouent puis partent.
+    for old_key, e in list(_LOGIN_ATTEMPTS.items()):
         if now - e["last_attempt"] > LOGIN_LOCKOUT_S * 2:
-            del _LOGIN_ATTEMPTS[old_ip]
-    entry = _LOGIN_ATTEMPTS.setdefault(ip, {"count": 0, "locked_until": 0.0, "last_attempt": now})
+            del _LOGIN_ATTEMPTS[old_key]
+    entry = _LOGIN_ATTEMPTS.setdefault(key, {"count": 0, "locked_until": 0.0, "last_attempt": now})
     entry["count"] += 1
     entry["last_attempt"] = now
     if entry["count"] >= LOGIN_MAX_ATTEMPTS:
@@ -603,22 +622,22 @@ def _register_login_failure(ip: str) -> None:
         entry["count"] = 0
 
 
-def _register_login_success(ip: str) -> None:
-    _LOGIN_ATTEMPTS.pop(ip, None)
+def _register_login_success(key: str) -> None:
+    _LOGIN_ATTEMPTS.pop(key, None)
 
 
 @app.post("/api/login")
-async def api_login(payload: dict, request: Request):
-    ip = request.client.host if request.client else "unknown"
-    if _login_rate_limited(ip):
-        raise HTTPException(status_code=429, detail="Trop de tentatives — réessayez dans quelques minutes")
+async def api_login(payload: dict):
     name = (payload.get("name") or "").strip()
     password = payload.get("password") or ""
+    login_key = name.lower() or "unknown"
+    if _login_rate_limited(login_key):
+        raise HTTPException(status_code=429, detail="Trop de tentatives — réessayez dans quelques minutes")
     wl = _check_credentials(name, password)
     if wl is None:
-        _register_login_failure(ip)
+        _register_login_failure(login_key)
         raise HTTPException(status_code=401, detail="Nom ou mot de passe invalide")
-    _register_login_success(ip)
+    _register_login_success(login_key)
     now = time.time()
     # Purge opportuniste des jetons expirés à chaque connexion — sans ça
     # SESSIONS ne redescend jamais tant que le conteneur tourne (relevé par
@@ -819,6 +838,11 @@ async def api_setup_save(payload: dict, authorization: str = Header(default=""))
                 password = (entry.get("password") or "").strip()
                 if not name or not password:
                     continue  # nom vide, ou compte existant dont le mot de passe reste inchangé
+                if not _NAME_RE.match(name):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Nom de compte invalide ({name!r}) — lettres/chiffres/_/- uniquement",
+                    )
                 _add_or_update_extra_user(name, password)
             settings_store.set_field(
                 "VODIO_EXTRA_USERS",
@@ -1093,18 +1117,41 @@ async def api_resolve_lumio(imdb_id: str, payload: dict, wl: Watchlist = Depends
 @app.post("/api/watchlist/{imdb_id}/download-source")
 async def api_download_source(imdb_id: str, payload: dict, wl: Watchlist = Depends(resolve_session)):
     """Démarre AllDebrid pour un lien magnet choisi explicitement dans la
-    liste `/sources` (bouton ⬇️ AllDebrid par source, façon Ludio)."""
+    liste `/sources` (bouton ⬇️ AllDebrid par source, façon Ludio).
+
+    Audit sécurité 2026-09-15 : le lien soumis est revérifié contre les
+    sources que VODIO lui-même a trouvées pour ce titre (même liste que
+    `/sources`) avant tout appel AllDebrid — sinon n'importe quel compte
+    authentifié pouvait faire télécharger un magnet totalement arbitraire
+    sur le compte AllDebrid partagé (abus de quota/stockage, contenu hors
+    de tout contrôle)."""
     if not ALLDEBRID_API_KEY:
         raise HTTPException(status_code=503, detail="AllDebrid non configuré")
     if not MEDIAFLOW_API_PASSWORD:
         raise HTTPException(status_code=503, detail="MediaFlow non configuré")
+    if not WACUSTOM_CONFIG:
+        raise HTTPException(status_code=503, detail="Wacustom non configuré")
+    entry = wl.get(imdb_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Titre absent de la watchlist")
     link = (payload.get("link") or "").strip()
     if not link.startswith("magnet:"):
         raise HTTPException(status_code=400, detail="Ce lien n'est pas un magnet — rien à démarrer automatiquement, copie-le et ouvre-le toi-même")
+    submitted_hash = _magnet_infohash(link)
+    if not submitted_hash:
+        raise HTTPException(status_code=400, detail="Magnet invalide (pas d'infohash)")
+    known_sources = await availability.list_sources(WACUSTOM_URL, WACUSTOM_CONFIG, entry, QUALITY_MIN)
+    known_hashes = {h for s in known_sources if (h := _magnet_infohash(s.get("link") or ""))}
+    if submitted_hash not in known_hashes:
+        raise HTTPException(
+            status_code=403,
+            detail="Ce lien ne correspond à aucune source proposée par VODIO pour ce titre",
+        )
     try:
         result = await alldebrid.start_download(ALLDEBRID_API_KEY, link)
     except alldebrid.AllDebridError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+    wl.set_download_source(imdb_id, result["id"])
     if result["ready"]:
         resolved = await _resolve_ready_download(result["id"])
         if resolved:
@@ -1115,9 +1162,18 @@ async def api_download_source(imdb_id: str, payload: dict, wl: Watchlist = Depen
 @app.get("/api/watchlist/{imdb_id}/download-source/{magnet_id}")
 async def api_download_source_status(imdb_id: str, magnet_id: int, wl: Watchlist = Depends(resolve_session)):
     """Revérifie un téléchargement démarré via `/download-source` (polling
-    manuel côté page, bouton 🔄 Revérifier)."""
+    manuel côté page, bouton 🔄 Revérifier).
+
+    Audit sécurité 2026-09-15 : `magnet_id` est revérifié contre celui
+    mémorisé pour CETTE entrée watchlist — sinon n'importe quel compte
+    authentifié pouvait deviner un petit ID entier et récupérer le lien de
+    déblocage AllDebrid de n'importe quel magnet ajouté par n'importe quel
+    service partageant la même clé (IDOR)."""
     if not ALLDEBRID_API_KEY:
         raise HTTPException(status_code=503, detail="AllDebrid non configuré")
+    entry = wl.get(imdb_id)
+    if entry is None or entry.get("download_source_magnet_id") != magnet_id:
+        raise HTTPException(status_code=404, detail="Téléchargement introuvable pour ce titre")
     st = await alldebrid.get_status(ALLDEBRID_API_KEY, magnet_id)
     if st["failed"]:
         return {"ready": False, "failed": True}

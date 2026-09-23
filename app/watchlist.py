@@ -110,6 +110,24 @@ class Watchlist:
                 return True
         return False
 
+    def set_download_source(self, imdb_id: str, magnet_id: int | None) -> bool:
+        """Mémorise l'ID du magnet lancé via `/download-source` (bouton ⬇️ par
+        source choisie manuellement dans `/sources`) — distinct de
+        `precache_magnet_id` (pré-cache automatique) pour ne pas mélanger le
+        suivi des deux fonctionnalités. Permet à `/download-source/{magnet_id}`
+        de vérifier que l'appelant interroge bien un magnet qu'IL a démarré
+        pour CE titre, plutôt que n'importe quel ID deviné (audit sécurité
+        2026-09-15 — IDOR corrigé)."""
+        for i in self.items:
+            if i["id"] == imdb_id:
+                if magnet_id is None:
+                    i.pop("download_source_magnet_id", None)
+                else:
+                    i["download_source_magnet_id"] = magnet_id
+                self._save()
+                return True
+        return False
+
     def start_precache_season(self, imdb_id: str, season: int, total: int) -> bool:
         """Initialise le suivi de pré-cache d'une saison entière : un épisode
         par entrée, statut "pending" (rempli au fil du traitement en tâche de

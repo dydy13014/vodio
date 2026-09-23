@@ -303,7 +303,14 @@ async def _refresh_watchlist_badges(label: str, wl: Watchlist, sms: bool = True)
     current = wl.metas()  # non vus, avec les anciens badges (+ pending_notify persisté)
     was_available = {m["id"]: availability._is_available_name(m["name"]) for m in current}
     was_pending = {m["id"]: bool(m.get("pending_notify")) for m in current}
-    items = [_strip_badge(m) for m in current]
+    # Un titre dispo et confirmé n'est plus jamais revérifié : chaque
+    # vérification passe par Wacustom, qui interroge Lumio, dont le quota
+    # sautait sur les rafales du refresh. Seuls restent les
+    # titres pas encore dispo et ceux en attente de confirmation (SMS).
+    items = [
+        _strip_badge(m) for m in current
+        if not was_available[m["id"]] or was_pending[m["id"]]
+    ]
     if not items:
         return
     await _badge_watchlist(items)
@@ -351,7 +358,8 @@ async def _refresh_watchlist_badges(label: str, wl: Watchlist, sms: bool = True)
             m["pending_notify"] = False
 
     wl.replace_all(items)
-    log.info("watchlist%s : badges rafraîchis (%d titres)", f" ({label})" if label else "", len(items))
+    log.info("watchlist%s : %d titre(s) vérifié(s), %d déjà dispo non revérifié(s)",
+             f" ({label})" if label else "", len(items), len(current) - len(items))
     if not sms:
         return
     for m in to_notify:
@@ -375,7 +383,9 @@ async def refresh() -> None:
         state["last_error"] = "matching TMDB : 0 film matché"
         log.error(state["last_error"])
         return
-    await _badge(metas)
+    # Catalogue non vérifié : seule la watchlist l'est (quota Lumio, cf.
+    # _refresh_watchlist_badges). Stremio ne montre de toute façon pas ces
+    # badges (_clean_name) ; le bandeau web retombe sur les sorties TMDB.
     state["metas"] = metas
     state["last_refresh"] = time.time()
     state["last_error"] = ""
@@ -454,8 +464,8 @@ async def _verify_on_trackers(imdb_id: str) -> bool:
 
 async def refresh_c411() -> None:
     """Nouveautés torrent — complète AlloCiné (docs/séries étrangères absents
-    de sa page VOD), filtré (audio FR, ≥QUALITY_MIN) et badgé via le même
-    mécanisme AIOStreams que le catalogue AlloCiné. Interroge un ou plusieurs
+    de sa page VOD), filtré (audio FR, ≥QUALITY_MIN), sans vérification de
+    disponibilité (réservée à la watchlist). Interroge un ou plusieurs
     trackers Torznab (C411, Tr4ker, V3X — même format chez les trois : une
     seule requête par tracker et par refresh, jamais une par titre). Source
     entièrement désactivée si aucun tracker n'est configuré."""
@@ -495,7 +505,6 @@ async def refresh_c411() -> None:
         state_c411["last_error"] = "C411 : 0 titre matché après filtre"
         log.error(state_c411["last_error"])
         return
-    await _badge(metas)
     state_c411["metas"] = metas
     state_c411["last_refresh"] = time.time()
     state_c411["last_error"] = ""

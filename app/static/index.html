@@ -997,7 +997,7 @@ function openDetail(id) {
 
   // Extra (Precache / Sources)
   let extraHTML = '';
-  if(!isWatched && (m.name||"").startsWith("⏳")) {
+  if(!isWatched && ((m.name||"").startsWith("⏳") || (isAvailable && !isLumio))) {
       if(isSeries) {
           extraHTML += `<div class="precache-ui">
              <div class="precache-status">Pré-cache saison disponible</div>
